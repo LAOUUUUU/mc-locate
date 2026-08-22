@@ -18,12 +18,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # One universal binary rather than separate Intel and Apple Silicon
+          # builds: GitHub's Intel macOS runners are being retired and jobs
+          # requesting them sit queued indefinitely. Apple's toolchain
+          # cross-compiles to x86_64 from Apple Silicon without extra setup, so
+          # `lipo` can fuse both slices into a single download that works on
+          # every Mac.
           - os: macos-14
-            target: aarch64-apple-darwin
-            label: macos-apple-silicon
-          - os: macos-13
-            target: x86_64-apple-darwin
-            label: macos-intel
+            target: universal-apple-darwin
+            label: macos-universal
           # 22.04 rather than latest: binaries link against its older glibc,
           # so they also run on distributions a few years behind.
           - os: ubuntu-22.04
@@ -49,10 +52,24 @@ jobs:
           "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
       - name: Add target
+        if: matrix.target != 'universal-apple-darwin'
         run: rustup target add ${{ matrix.target }}
 
       - name: Build
+        if: matrix.target != 'universal-apple-darwin'
         run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Build universal macOS binary
+        if: matrix.target == 'universal-apple-darwin'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create -output target/universal-apple-darwin/release/mc-locate \
+            target/aarch64-apple-darwin/release/mc-locate \
+            target/x86_64-apple-darwin/release/mc-locate
+          lipo -info target/universal-apple-darwin/release/mc-locate
 
       - name: Package (unix)
         if: runner.os != 'Windows'

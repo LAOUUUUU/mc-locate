@@ -19,11 +19,11 @@ or Linux; you run it from a shell and drive it with the arrow keys.
 
 ### macOS
 
-Pick `mc-locate-macos-apple-silicon.tar.gz` for an M-series Mac, or
-`mc-locate-macos-intel.tar.gz` for an Intel one. Then in Terminal:
+`mc-locate-macos-universal.tar.gz` is a universal binary — the same download
+works on both Apple Silicon and Intel Macs. In Terminal:
 
 ```bash
-tar -xzf ~/Downloads/mc-locate-macos-apple-silicon.tar.gz
+tar -xzf ~/Downloads/mc-locate-macos-universal.tar.gz
 xattr -d com.apple.quarantine mc-locate
 ./mc-locate
 ```
