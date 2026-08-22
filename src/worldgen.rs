@@ -346,6 +346,80 @@ impl WorldGen {
     }
 }
 
+/// A structure's per-version placement configuration, straight from cubiomes.
+///
+/// These are the numbers that must never be hand-rolled: the salt and the
+/// region grid changed at 1.13 and again for individual structures since, and
+/// a stale constant produces confident nonsense. `getStructureConfig` is
+/// cubiomes' own per-version table.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StructureConfig {
+    /// Mixed into the region seed, unique per structure type.
+    pub salt: i32,
+    /// Region grid size, in chunks.
+    pub region_size: i32,
+    /// The bound passed to `nextInt` when picking the in-region offset.
+    pub chunk_range: i32,
+    pub rarity: f32,
+}
+
+impl StructureConfig {
+    /// Region size in blocks.
+    pub fn region_blocks(&self) -> i32 {
+        self.region_size * 16
+    }
+
+    /// The 2-adic valuation of `chunk_range` — how many low bits of the
+    /// `nextInt` result are determined by the low bits of the seed.
+    ///
+    /// This is what makes bit-lifting work: for `2^j | chunk_range`,
+    /// `nextInt(chunk_range) mod 2^j` equals `(state >> 17) mod 2^j`, which
+    /// depends only on the low `17 + j` bits of the seed.
+    pub fn lift_valuation(&self) -> u32 {
+        if self.chunk_range <= 0 {
+            return 0;
+        }
+        self.chunk_range.trailing_zeros()
+    }
+
+    /// Whether `nextInt` takes its power-of-two fast path for this range.
+    ///
+    /// That branch reads the *high* bits of the state, so such structures
+    /// cannot take part in a low-bit sieve.
+    pub fn is_power_of_two_range(&self) -> bool {
+        self.chunk_range > 0 && (self.chunk_range & (self.chunk_range - 1)) == 0
+    }
+}
+
+/// Looks up a structure's placement configuration for a version.
+///
+/// Returns `None` when the structure does not generate in that version.
+pub fn structure_config(version: Version, structure: StructureType) -> Option<StructureConfig> {
+    use std::mem::MaybeUninit;
+
+    let mut conf: MaybeUninit<cubiomes_sys::StructureConfig> = MaybeUninit::uninit();
+    // SAFETY: `getStructureConfig` fills the out-parameter and returns non-zero
+    // on success; both inputs are plain enum tags.
+    let ok = unsafe {
+        cubiomes_sys::getStructureConfig(
+            structure as i32,
+            version.mc() as i32,
+            conf.as_mut_ptr(),
+        )
+    };
+    if ok == 0 {
+        return None;
+    }
+    // SAFETY: initialised by the call above.
+    let conf = unsafe { conf.assume_init() };
+    Some(StructureConfig {
+        salt: conf.salt,
+        region_size: conf.regionSize as i32,
+        chunk_range: conf.chunkRange as i32,
+        rarity: conf.rarity,
+    })
+}
+
 /// Structure types offered in the menus, with the dimension each lives in.
 pub const STRUCTURES: &[(StructureType, &str, Dimension)] = &[
     (StructureType::Village, "Village", Dimension::DIM_OVERWORLD),
@@ -457,6 +531,56 @@ mod tests {
         // Single-point lookup should agree with the rectangle it sits in.
         let one = modern.surface_height_at(512, 512).unwrap();
         assert!((one - hs[0]).abs() < 1e-3, "{one} vs {}", hs[0]);
+    }
+
+    #[test]
+    fn structure_configs_come_from_cubiomes_and_track_the_version() {
+        // The documented legacy village salt, which did *not* change at 1.13.
+        for v in [Version::V1_12_2, Version::V1_16_5, Version::V1_21_1] {
+            assert_eq!(structure_config(v, StructureType::Village).unwrap().salt, 10387312);
+        }
+
+        // What 1.13 actually changed for villages is nothing; what changed is
+        // that the temple family stopped sharing one salt. Before 1.13 desert
+        // pyramids, swamp huts and igloos were a single "Feature" type on salt
+        // 14357617; afterwards they split.
+        let old_hut = structure_config(Version::V1_12_2, StructureType::Swamp_Hut).unwrap();
+        let old_igloo = structure_config(Version::V1_12_2, StructureType::Igloo).unwrap();
+        let old_pyramid = structure_config(Version::V1_12_2, StructureType::Desert_Pyramid).unwrap();
+        assert_eq!(old_hut.salt, old_pyramid.salt);
+        assert_eq!(old_igloo.salt, old_pyramid.salt);
+
+        let new_hut = structure_config(Version::V1_13_2, StructureType::Swamp_Hut).unwrap();
+        let new_igloo = structure_config(Version::V1_13_2, StructureType::Igloo).unwrap();
+        assert_ne!(new_hut.salt, old_hut.salt, "swamp hut salt should split at 1.13");
+        assert_ne!(new_hut.salt, new_igloo.salt, "the temple salts should differ after 1.13");
+
+        // Village spacing widened at 1.18 (32/24 region/range -> 34/26).
+        let pre = structure_config(Version::V1_17_1, StructureType::Village).unwrap();
+        let post = structure_config(Version::V1_18_2, StructureType::Village).unwrap();
+        assert_eq!((pre.region_size, pre.chunk_range), (32, 24));
+        assert_eq!((post.region_size, post.chunk_range), (34, 26));
+        assert_eq!(post.region_blocks(), 34 * 16);
+
+        // A structure that did not exist yet has no config at all.
+        assert!(structure_config(Version::V1_8_9, StructureType::Ancient_City).is_none());
+        assert!(structure_config(Version::V1_12_2, StructureType::Shipwreck).is_none());
+    }
+
+    #[test]
+    fn lift_valuation_matches_the_chunk_range() {
+        // 24 = 8*3 so three low bits are liftable; 20 = 4*5 gives two.
+        let probe = |r: i32| StructureConfig {
+            salt: 0,
+            region_size: 32,
+            chunk_range: r,
+            rarity: 0.0,
+        };
+        assert_eq!(probe(24).lift_valuation(), 3);
+        assert_eq!(probe(20).lift_valuation(), 2);
+        assert_eq!(probe(16).lift_valuation(), 4);
+        assert!(probe(16).is_power_of_two_range());
+        assert!(!probe(24).is_power_of_two_range());
     }
 
     #[test]

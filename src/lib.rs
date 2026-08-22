@@ -1,7 +1,9 @@
 pub mod bedrock;
 pub mod compass;
 pub mod grid;
+pub mod lifting;
 pub mod log_watcher;
+pub mod lll;
 pub mod logscrape;
 pub mod multicrack;
 pub mod ocr;

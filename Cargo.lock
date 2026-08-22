@@ -1000,6 +1000,10 @@ dependencies = [
  "leptess",
  "nalgebra",
  "notify",
+ "num-bigint",
+ "num-integer",
+ "num-rational",
+ "num-traits",
  "rayon",
  "regex",
 ]
