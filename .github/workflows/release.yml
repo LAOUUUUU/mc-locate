@@ -76,7 +76,7 @@ jobs:
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/mc-locate dist/
-          cp README.md dist/
+          cp README.md LICENSE dist/
           tar -czf mc-locate-${{ matrix.label }}.tar.gz -C dist .
 
       - name: Package (windows)
@@ -85,7 +85,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item target/${{ matrix.target }}/release/mc-locate.exe dist/
-          Copy-Item README.md dist/
+          Copy-Item README.md,LICENSE dist/
           Compress-Archive -Path dist/* -DestinationPath mc-locate-${{ matrix.label }}.zip
 
       - uses: actions/upload-artifact@v4

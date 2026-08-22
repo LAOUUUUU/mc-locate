@@ -1,14 +1,48 @@
+<div align="center">
+
 # mc-locate
 
-Reverse-engineering Minecraft **Java Edition** seeds and coordinates from limited
-in-game observations — screenshots, footage, and data you can collect by walking
-around.
+**Reverse-engineer Minecraft Java Edition seeds and coordinates
+from limited in-game observations**
 
-It all rests on one fact: Java worldgen is driven by `java.util.Random`, a 48-bit
-linear congruential generator. It is not cryptographic, its state is small, and
-because the multiplier is odd it is **invertible** — you can step it backwards as
-cheaply as forwards. A handful of independent observations is often enough to
-collapse the space to a single seed.
+[![CI](https://github.com/LAOUUUUU/mc-locate/actions/workflows/ci.yml/badge.svg)](https://github.com/LAOUUUUU/mc-locate/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/LAOUUUUU/mc-locate?color=brightgreen&label=release)](https://github.com/LAOUUUUU/mc-locate/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/LAOUUUUU/mc-locate/total?color=blue&label=downloads)](https://github.com/LAOUUUUU/mc-locate/releases)
+[![Stars](https://img.shields.io/github/stars/LAOUUUUU/mc-locate?style=flat&color=yellow)](https://github.com/LAOUUUUU/mc-locate/stargazers)
+[![Visitors](https://visitor-badge.laobi.icu/badge?page_id=LAOUUUUU.mc-locate&left_text=visitors)](https://github.com/LAOUUUUU/mc-locate)
+
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
+![Rust](https://img.shields.io/badge/rust-2024%20edition-orange?logo=rust&logoColor=white)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.8.9%20%E2%86%92%201.21-62B47A)
+
+[**Download**](https://github.com/LAOUUUUU/mc-locate/releases/latest) &nbsp;·&nbsp;
+[Install](#install) &nbsp;·&nbsp;
+[The modes](#the-modes) &nbsp;·&nbsp;
+[What is verified](#what-is-verified-and-against-what)
+
+</div>
+
+---
+
+Point it at whatever you can see — a bedrock pattern, a slime chunk, a village,
+an eye-of-ender throw, a screenshot with the F3 overlay open — and it works
+backwards to the seed or the coordinate that produced it.
+
+It all rests on one fact: Java worldgen is driven by `java.util.Random`, a
+48-bit linear congruential generator. It is not cryptographic, its state is
+small, and because the multiplier is odd it is **invertible** — you can step it
+backwards as cheaply as forwards. A handful of independent observations is often
+enough to collapse the space to a single seed.
+
+### At a glance
+
+|  |  |
+|---|---|
+| **11 modes** | seed cracking, coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
+| **212 tests** | every RNG formula checked against an independent source, not from memory |
+| **3 platforms** | one universal macOS binary, Linux x86_64, Windows x86_64 |
+| **No setup** | no Rust, no Java, no Minecraft install needed to run it |
 
 ## Install
 
@@ -277,6 +311,32 @@ starts:
 | Mode 4 full space | 2⁴⁸ | ~a day on 8 cores; use a range or mode 9 |
 | Mode 1b full space | 2⁴⁸ | Same; ranged or candidate-filtered instead |
 | Mode 1a full world border | ~3.6 × 10¹⁵ positions | No. Narrow with mode 11 or 6 first |
+
+## Built on
+
+- **[cubiomes](https://github.com/Cubitect/cubiomes)** (Cubitect) — the C
+  biome and structure generator every version-specific constant comes from.
+  Statically linked; MIT, notice reproduced in [LICENSE](LICENSE).
+- **[LattiCG](https://github.com/mjtb49/LattiCG)** (mjtb49 et al.) — the
+  lattice reversal approach `lll.rs` and `reverser.rs` are a port of.
+- **[Nether_Bedrock_Cracker](https://github.com/19MisterX98/Nether_Bedrock_Cracker)**
+  (19MisterX98) — source of the verified 1.18+ bedrock algorithm and its test
+  vectors.
+- **[SeedcrackerX](https://github.com/19MisterX98/SeedcrackerX)** — reference
+  for how the constraint sources actually compose, including the bit-lifting
+  route.
+- **[Ninjabrain-Bot](https://github.com/Ninjabrain1/Ninjabrain-Bot)** — the
+  Bayesian stronghold model mode 10 follows in spirit.
+
+## Contributing
+
+CI runs the full suite plus clippy on Linux, macOS and Windows for every push,
+so a green tick means it genuinely builds and passes everywhere. To cut a
+release, tag it:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
 
 ## A note on use
 
