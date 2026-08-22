@@ -57,6 +57,24 @@ const POLL_INTERVAL: Duration = Duration::from_millis(250);
 /// ATLauncher all let the user move their instance root, and modpack launchers
 /// come and go. A "type a custom path" option in [`watch`] covers the rest.
 pub fn candidate_log_paths() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = candidate_game_dirs()
+        .into_iter()
+        .map(|d| d.join("logs").join("latest.log"))
+        .filter(|p| p.is_file())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Every Minecraft game directory we can find, across launchers and OSes.
+///
+/// The launcher-and-platform table lives here once. Logs are one thing that
+/// hangs off a game directory and screenshots are another
+/// ([`crate::sessionfile::candidate_screenshot_dirs`]), so the knowledge of
+/// *where installations live* is deliberately kept separate from what we then
+/// want out of them.
+pub fn candidate_game_dirs() -> Vec<PathBuf> {
     let mut out = Vec::new();
     let home = logscrape::home_dir();
 
@@ -64,7 +82,7 @@ pub fn candidate_log_paths() -> Vec<PathBuf> {
         // %APPDATA% is roaming AppData; the vanilla launcher puts .minecraft
         // there, and the MultiMC family puts its instance roots there.
         if let Some(appdata) = std::env::var_os("APPDATA").map(PathBuf::from) {
-            push_log(&mut out, appdata.join(".minecraft"));
+            push_game_dir(&mut out, appdata.join(".minecraft"));
             for launcher in ["PrismLauncher", "MultiMC", "ATLauncher", "GDLauncher"] {
                 scan_instance_root(&mut out, &appdata.join(launcher).join("instances"));
             }
@@ -90,8 +108,8 @@ pub fn candidate_log_paths() -> Vec<PathBuf> {
             let support = home.join("Library").join("Application Support");
             // Note the missing dot: the macOS vanilla launcher uses
             // "minecraft", not ".minecraft".
-            push_log(&mut out, support.join("minecraft"));
-            push_log(&mut out, home.join(".minecraft"));
+            push_game_dir(&mut out, support.join("minecraft"));
+            push_game_dir(&mut out, home.join(".minecraft"));
             for launcher in ["PrismLauncher", "MultiMC", "ATLauncher"] {
                 scan_instance_root(&mut out, &support.join(launcher).join("instances"));
             }
@@ -107,7 +125,7 @@ pub fn candidate_log_paths() -> Vec<PathBuf> {
     } else {
         // Linux and the BSDs.
         if let Some(home) = &home {
-            push_log(&mut out, home.join(".minecraft"));
+            push_game_dir(&mut out, home.join(".minecraft"));
             let share = home.join(".local").join("share");
             for launcher in ["PrismLauncher", "multimc", "MultiMC", "ATLauncher"] {
                 scan_instance_root(&mut out, &share.join(launcher).join("instances"));
@@ -133,11 +151,15 @@ pub fn candidate_log_paths() -> Vec<PathBuf> {
     out
 }
 
-/// Appends `<game_dir>/logs/latest.log` if it exists.
-fn push_log(out: &mut Vec<PathBuf>, game_dir: PathBuf) {
-    let path = game_dir.join("logs").join("latest.log");
-    if path.is_file() {
-        out.push(path);
+/// Appends a game directory if it looks like one.
+///
+/// "Looks like one" means it exists and holds either a `logs` or a
+/// `screenshots` folder — enough to rule out unrelated directories without
+/// requiring the game to have been run for whichever purpose the caller has
+/// in mind.
+fn push_game_dir(out: &mut Vec<PathBuf>, dir: PathBuf) {
+    if dir.is_dir() && (dir.join("logs").is_dir() || dir.join("screenshots").is_dir()) {
+        out.push(dir);
     }
 }
 
@@ -157,9 +179,9 @@ fn scan_instance_root(out: &mut Vec<PathBuf>, root: &Path) {
         if !dir.is_dir() {
             continue;
         }
-        push_log(out, dir.join(".minecraft"));
-        push_log(out, dir.join("minecraft"));
-        push_log(out, dir);
+        push_game_dir(out, dir.join(".minecraft"));
+        push_game_dir(out, dir.join("minecraft"));
+        push_game_dir(out, dir);
     }
 }
 

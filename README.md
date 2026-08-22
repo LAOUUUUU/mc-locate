@@ -39,7 +39,7 @@ enough to collapse the space to a single seed.
 
 |  |  |
 |---|---|
-| **12 modes** | seed cracking, coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
+| **14 modes** | seed cracking, coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
 | **212 tests** | every RNG formula checked against an independent source, not from memory |
 | **3 platforms** | one universal macOS binary, Linux x86_64, Windows x86_64 |
 | **No setup** | no Rust, no Java, no Minecraft install needed to run it |
@@ -142,6 +142,8 @@ type it once.
 | 10 | Stronghold Ring Triangulator | Player X/Z and yaw per eye-of-ender throw | Throw an eye, then F3 + C and read position and `Facing` |
 | 11 | Nether ↔ Overworld Portal Converter | One coordinate and its dimension | Anywhere. Pure arithmetic, no search |
 | 12 | Observation Advisor | Whatever you already have | Nothing new — it tells you what to go and look at next, and explains why a candidate survives |
+| 13 | Session & Observations | A saved file, or a screenshots folder | Save/load your work; watch your screenshots folder and read new ones as you press F2 |
+| 14 | Documentation | Nothing | The full write-up for every mode, offline, inside the binary |
 
 ### Mode 9: three routes to a seed
 
@@ -353,6 +355,45 @@ Seed 12840895245824: 146 of 147 constraints matched.
 ```
 
 Mode 9 offers the same breakdown inline on its results.
+
+### Mode 13: persistence, and the mod interface
+
+A session used to live only in memory — quitting discarded every coordinate you
+had typed. Mode 13 saves it as plain JSON and reads it back, merging rather than
+replacing so re-importing a file adds nothing and will not clobber a seed you
+already have.
+
+That same file is **the contract for anything else that wants to feed
+mc-locate** — a Fabric mod dumping bedrock as you fly the Nether, a script, a
+hand-written file:
+
+```json
+{
+  "format": "mc-locate-observations",
+  "version": 1,
+  "bedrock":    [{"x": 11, "y": 4, "z": -97, "is_bedrock": true}],
+  "structures": [{"type": "desert_pyramid", "x": 1384, "z": -2952}],
+  "pillar_heights": [76, null, 82, null, null, 94, null, null, null, 103]
+}
+```
+
+Every field is optional, unknown fields from a newer producer are ignored rather
+than fatal, and structure names accept both cubiomes' spelling and the menu
+labels. The producer never needs to know any of the maths.
+
+It also **watches your screenshots folder**. Minecraft cannot be made to press
+F2 for you, but the other half of that loop works: the moment the game writes a
+new PNG, the F3 overlay is read out of it. The advisor says what to look at, you
+press F2, and the observation arrives without typing.
+
+### Mode 14: documentation, offline
+
+Every mode's full write-up ships inside the binary — what it needs, where that
+comes from in game, the actual formulas, its limits, and what it feeds next.
+Plus an overview of how the modes chain and a glossary.
+
+The mode list, the menu and the docs all read one registry, so a mode cannot be
+added without documentation: [a test enforces it](src/modes.rs).
 
 ## Built on
 

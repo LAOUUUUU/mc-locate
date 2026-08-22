@@ -608,7 +608,7 @@ mod backend {
     /// OCRs one image, optionally taking a second reading with the threshold
     /// flipped. Returns the text of the last attempt as well, since that is
     /// what the user needs to see when nothing parsed.
-    fn read_one(
+    pub(crate) fn read_one(
         ocr: &mut Ocr,
         img: &DynamicImage,
         crop: CropSpec,
@@ -792,6 +792,27 @@ mod backend {
             ui::note(&format!("  {line}"));
         }
     }
+}
+
+/// Reads one screenshot with sensible defaults, for callers that just want the
+/// coordinates and have no user to ask about crop regions.
+///
+/// Used by the screenshots-folder watcher, where prompting for settings on
+/// every incoming file would defeat the point. Tries the top-left quadrant —
+/// where vanilla draws the XYZ block — and both threshold polarities.
+#[cfg(feature = "ocr")]
+pub fn read_screenshot_default(path: &std::path::Path) -> Result<Option<F3Coords>> {
+    let img = image::open(path)
+        .with_context(|| format!("could not decode {}", path.display()))?;
+    let mut ocr = backend::Ocr::new()?;
+    let (found, _text) = backend::read_one(
+        &mut ocr,
+        &img,
+        CropSpec::TopLeftQuadrant,
+        Preprocess::default(),
+        true,
+    )?;
+    Ok(found)
 }
 
 #[cfg(feature = "ocr")]

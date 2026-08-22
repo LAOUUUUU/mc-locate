@@ -3,38 +3,19 @@
 //!
 //! Everything here is worldgen mathematics: Java's `java.util.Random` is a
 //! 48-bit LCG and is trivially reversible, so a handful of observations is
-//! often enough to recover a seed or a position. See the README for what each
-//! mode needs and where that input comes from in game.
+//! often enough to recover a seed or a position. Mode 14 documents every mode
+//! in full, offline.
 
 use anyhow::Result;
+use mc_locate::modes::{MODES, menu_label};
 use mc_locate::session::Session;
-use mc_locate::{
-    advisor, bedrock, compass, logscrape, multicrack, ocr, portal, pose, slime, stronghold,
-    structure, terrain, ui,
-};
-
-/// A menu entry: display name, and the function that runs it.
-type Mode = (&'static str, fn(&mut Session) -> Result<()>);
-
-const MODES: &[Mode] = &[
-    ("Nether Bedrock Toolkit", bedrock::run),
-    ("Overworld Terrain Shape Matcher", terrain::run),
-    ("F3 Screenshot OCR Reader", ocr::run),
-    ("Slime Chunk Seed Cracker", slime::run),
-    ("Camera Pose Estimator", pose::run),
-    ("Structure-Relative Search Narrower", structure::run),
-    ("Chat/Log Coordinate Scraper (live or file)", logscrape::run),
-    ("Compass + Biome Triangulation Estimator", compass::run),
-    ("Multi-Source Seed Cracker (combine everything)", multicrack::run),
-    ("Stronghold Ring Triangulator (Bayesian)", stronghold::run),
-    ("Nether <-> Overworld Portal Converter", portal::run),
-    ("Observation Advisor (what to look at next)", advisor::run),
-];
+use mc_locate::ui;
 
 fn banner() {
     println!();
     println!("\x1b[1;36m  mc-locate\x1b[0m \x1b[2mv{}\x1b[0m", env!("CARGO_PKG_VERSION"));
     println!("  \x1b[2mSeed and coordinate recovery for Minecraft Java Edition\x1b[0m");
+    println!("  \x1b[2mNew here? Mode 14 explains every mode; mode 11 needs nothing to try.\x1b[0m");
 }
 
 fn main() -> Result<()> {
@@ -57,11 +38,7 @@ fn main() -> Result<()> {
             println!("  \x1b[2mSession: {summary}\x1b[0m");
         }
 
-        let mut items: Vec<String> = MODES
-            .iter()
-            .enumerate()
-            .map(|(i, (name, _))| format!("{:>2}. {name}", i + 1))
-            .collect();
+        let mut items: Vec<String> = (0..MODES.len()).map(menu_label).collect();
         items.push(format!("{:>2}. Quit", MODES.len() + 1));
 
         let choice = match ui::select("Choose a mode", &items) {
@@ -81,7 +58,7 @@ fn main() -> Result<()> {
         // A mode failing is normal — bad input, an impossible search, a
         // version that does not support the feature. Report it and go back to
         // the menu rather than tearing the whole session down.
-        if let Err(e) = (MODES[choice].1)(&mut session) {
+        if let Err(e) = (MODES[choice].run)(&mut session) {
             println!();
             ui::warn(&format!("{e}"));
             for cause in e.chain().skip(1) {
