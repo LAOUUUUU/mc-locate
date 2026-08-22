@@ -387,36 +387,54 @@ pub fn run(session: &mut Session) -> Result<()> {
     };
 
     if pillar_seeds.is_empty() && constraints.is_empty() {
-        bail!("nothing to work with — record some pillars, structures, slime chunks or bedrock first");
+        bail!(
+            "nothing to work with — record End pillar heights, or a handful of structures \
+             (desert pyramids, igloos, swamp huts, villages) to crack by lifting, or slime \
+             chunks or bedrock to narrow an existing candidate list"
+        );
     }
 
     let found = if pillar_seeds.is_empty() {
-        ui::warn(
-            "No End pillar data. Without it there is no 16-bit shortcut and the space is 2^48, \
-             which is days of CPU time here.",
-        );
-        ui::note(
-            "Record the pillar heights on the central End island and re-run — it is the single \
-             highest-value observation in the game for this.",
-        );
-        if session.candidates.is_empty() {
-            return Ok(());
+        ui::note("No End pillar data, so there is no 16-bit shortcut available.");
+
+        // Structures alone are still enough, via bit-lifting: a structure's
+        // in-region offset modulo a power of two is fixed by the low bits of
+        // the seed, so a cheap sieve replaces the pillar shortcut entirely.
+        let lift_obs = crate::lifting::observations_from_session(version, &session.structures);
+        let sieve = match &lift_obs {
+            Ok(obs) if !obs.is_empty() => crate::lifting::Sieve::new(obs).ok(),
+            _ => None,
+        };
+
+        match sieve {
+            Some(sieve) => run_lifting(session, &lift_obs.expect("checked above"), &sieve)?,
+            None => {
+                ui::warn("Nor enough liftable structures to crack from structures alone.");
+                ui::note(
+                    "Either record the End pillar heights, or note a few more desert pyramids, \
+                     igloos, swamp huts or villages — those leak low seed bits and let mode 9 \
+                     crack with no End trip at all.",
+                );
+                if session.candidates.is_empty() {
+                    return Ok(());
+                }
+                if !ui::confirm(
+                    &format!(
+                        "Filter the {} existing candidate seed(s) instead?",
+                        session.candidates.len()
+                    ),
+                    true,
+                )? {
+                    return Ok(());
+                }
+                session
+                    .candidates
+                    .par_iter()
+                    .copied()
+                    .filter(|s| constraints.accepts(*s))
+                    .collect()
+            }
         }
-        if !ui::confirm(
-            &format!(
-                "Filter the {} existing candidate seed(s) instead?",
-                session.candidates.len()
-            ),
-            true,
-        )? {
-            return Ok(());
-        }
-        session
-            .candidates
-            .par_iter()
-            .copied()
-            .filter(|s| constraints.accepts(*s))
-            .collect()
     } else {
         ui::success(&format!(
             "{} pillar seed(s) match the observed arrangement.",
@@ -481,6 +499,87 @@ pub fn run(session: &mut Session) -> Result<()> {
     };
 
     report(session, version, found)
+}
+
+/// Drives the bit-lifting path: sieve the low bits, then sweep the high ones.
+fn run_lifting(
+    session: &mut Session,
+    observations: &[crate::lifting::Observation],
+    sieve: &crate::lifting::Sieve,
+) -> Result<Vec<i64>> {
+    ui::success(&format!(
+        "{} of {} structures can drive a low-bit sieve.",
+        sieve.liftable_count(),
+        observations.len()
+    ));
+    ui::note(&format!(
+        "Sieving the low {} bits of the seed; those structures pin down about {:.0} bits.",
+        sieve.bits,
+        sieve.information_bits()
+    ));
+    if sieve.information_bits() < sieve.bits as f64 {
+        ui::warn(
+            "That is less information than the sieve width, so expect many survivors and a long \
+             sweep. More structures will fix it.",
+        );
+    }
+
+    let pb = ui::spinner("sieving low bits");
+    let survivors = sieve.survivors();
+    pb.finish_and_clear();
+
+    if survivors.is_empty() {
+        bail!(
+            "no low-bit pattern fits those structures — one of the positions is wrong. Lifting \
+             has no tolerance to spend: each must be the structure's exact origin chunk."
+        );
+    }
+    ui::success(&format!("{} low-bit candidate(s) survived.", survivors.len()));
+
+    let total = sieve.sweep_size(survivors.len());
+    let rate = {
+        let probe = 500_000u64;
+        let t0 = std::time::Instant::now();
+        let n = (0..probe)
+            .into_par_iter()
+            .filter(|i| crate::lifting::seed_matches(*i as i64, observations))
+            .count();
+        std::hint::black_box(n);
+        (probe as f64 / t0.elapsed().as_secs_f64().max(1e-6)).max(1.0)
+    };
+    ui::note(&format!(
+        "Sweeping {total} candidates at about {:.1} million/second.",
+        rate / 1e6
+    ));
+    ui::warn(&format!(
+        "Estimated run time: {}.",
+        ui::humanize_duration(total as f64 / rate)
+    ));
+    if !ui::confirm("Start?", true)? {
+        return Ok(Vec::new());
+    }
+
+    let limit: usize = ui::input_default("Stop after this many hits", 32usize)?;
+    let scanned = AtomicU64::new(0);
+    let cancel = AtomicBool::new(false);
+    let pb = ui::progress_bar(total, "lifting");
+
+    let hits = std::thread::scope(|scope| {
+        let (s, c, p) = (&scanned, &cancel, &pb);
+        scope.spawn(move || {
+            while !c.load(Ordering::Relaxed) {
+                p.set_position(s.load(Ordering::Relaxed).min(total));
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+        });
+        let hits = sieve.crack(&survivors, &scanned, &cancel, limit);
+        cancel.store(true, Ordering::Relaxed);
+        hits
+    });
+    pb.finish_and_clear();
+
+    let _ = session;
+    Ok(hits)
 }
 
 fn benchmark(constraints: &ConstraintSet, pillar_seed: u16) -> f64 {
