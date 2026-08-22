@@ -14,6 +14,7 @@
 use anyhow::{Context, Result};
 use cubiomes::enums::{BiomeID, Dimension, MCVersion, StructureType};
 use cubiomes::generator::{BlockPosition, Cache, Generator, GeneratorFlags, Range, Scale};
+use cubiomes::noise::{BiomeNoise, SurfaceNoiseRelease};
 use cubiomes::structures::StructureRegion;
 
 /// The Minecraft versions this tool exposes.
@@ -211,6 +212,41 @@ impl WorldGen {
         Cache::new(&self.generator, range).context("could not allocate a cubiomes biome cache")
     }
 
+    /// Approximate surface height over a rectangle, in blocks.
+    ///
+    /// Coordinates and sizes are at cubiomes' 1:4 noise scale, so `quad_x = 128`
+    /// means block x = 512. The returned vector is row-major with
+    /// `heights[iz * size_x + ix]`.
+    ///
+    /// This is `mapApproxHeight`, the same estimate Cubiomes Viewer draws its
+    /// terrain preview from — good enough to match the *shape* of a ridgeline
+    /// from a screenshot, but not a block-exact heightmap. Mode 2 compares it
+    /// with a tolerance for exactly that reason.
+    pub fn surface_heights(
+        &self,
+        quad_x: i32,
+        quad_z: i32,
+        size_x: u32,
+        size_z: u32,
+    ) -> Result<Vec<f32>> {
+        let noise: BiomeNoise = SurfaceNoiseRelease::new(self.dimension, self.seed).into();
+        self.generator
+            .approx_surface_noise(quad_x, quad_z, size_x, size_z, &noise)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "cubiomes could not approximate surface height at quad ({quad_x}, {quad_z})"
+                )
+            })
+    }
+
+    /// Approximate surface height at a single block position.
+    pub fn surface_height_at(&self, x: i32, z: i32) -> Result<f32> {
+        let v = self.surface_heights(x.div_euclid(4), z.div_euclid(4), 1, 1)?;
+        v.first()
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("empty heightmap response"))
+    }
+
     /// Every stronghold in this seed, in generation order.
     ///
     /// These are the *real* positions, including the biome snapping that ring
@@ -397,6 +433,30 @@ mod tests {
             dists[3] > 4352.0 - 112.0,
             "4th stronghold should already be in ring 2"
         );
+    }
+
+    #[test]
+    fn surface_heights_are_plausible_block_levels() {
+        // 1.18 raised the world; the pre/post ranges should differ clearly,
+        // which also confirms the version is actually reaching the generator.
+        let modern = WorldGen::overworld(Version::V1_21_1, 1234);
+        let hs = modern.surface_heights(128, 128, 32, 32).unwrap();
+        assert_eq!(hs.len(), 32 * 32);
+        assert!(
+            hs.iter().all(|h| (-64.0..=320.0).contains(h)),
+            "heights outside the 1.18+ world range"
+        );
+
+        let legacy = WorldGen::overworld(Version::V1_16_5, 1234);
+        let hs_old = legacy.surface_heights(128, 128, 32, 32).unwrap();
+        assert!(
+            hs_old.iter().all(|h| (0.0..=256.0).contains(h)),
+            "heights outside the pre-1.18 world range"
+        );
+
+        // Single-point lookup should agree with the rectangle it sits in.
+        let one = modern.surface_height_at(512, 512).unwrap();
+        assert!((one - hs[0]).abs() < 1e-3, "{one} vs {}", hs[0]);
     }
 
     #[test]
