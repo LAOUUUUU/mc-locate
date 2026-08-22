@@ -28,7 +28,9 @@ cargo build --release --features ocr
 ```
 
 Without the feature, mode 3 explains how to enable it and offers manual
-coordinate entry instead.
+coordinate entry instead. With it, `backend_tests` renders a synthetic F3
+overlay and pushes it through the real Tesseract pipeline, so the OCR path is
+covered end to end rather than only at its pure-function edges.
 
 ```bash
 cargo test
@@ -109,7 +111,9 @@ suite (157 tests):
 Several modes also carry end-to-end round trips: harvest real data out of the
 generator, feed it back in, and assert the original answer comes back.
 
-### Two findings worth recording
+162 tests with `--features ocr`, 157 without.
+
+### Three findings worth recording
 
 **cubiomes' `isSlimeChunk` has signed-overflow UB.** It computes
 `chunkX * chunkX * 0x4c1906` in `int`, which overflows for |chunkX| ≥ 21. Built
@@ -118,6 +122,13 @@ from the wrapped one — disagreeing with the game for almost every chunk outsid
 spawn. Java has no such licence (JLS 15.17.1 defines int overflow as wrapping),
 so mc-locate uses `wrapping_mul` and matches the game at every optimisation
 level. The oracle vectors are generated with `-fwrapv` for this reason.
+
+**Tesseract reads `0` as `@` on the F3 overlay.** Not a guess — the synthetic
+overlay test produced `-1290.50@`, `6@ fps` and `-5@`. The digit-repair table
+now covers it. The same run exposed a worse bug: the repair table and the regex
+character class had drifted apart, so the regex stopped matching at the `@` and
+the repair never ran. They are now generated from one macro with a test that
+enforces agreement.
 
 **The `cubiomes` crate's stronghold iterator drops one.** `Generator::strongholds()`
 yields 127 of the 128, silently losing the first. mc-locate drives the C

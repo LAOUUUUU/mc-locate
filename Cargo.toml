@@ -30,6 +30,7 @@ default = []
 ocr = ["dep:leptess"]
 
 [dev-dependencies]
+ab_glyph = "0.2.32"
 # Independent third-party implementation of the Java LCG, used only to
 # cross-check our own random.rs in tests.
 java_random = "0.1.7"

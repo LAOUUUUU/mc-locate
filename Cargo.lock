@@ -986,6 +986,7 @@ dependencies = [
 name = "mc-locate"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "anyhow",
  "chrono",
  "csv",

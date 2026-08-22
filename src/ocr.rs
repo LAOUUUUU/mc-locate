@@ -239,7 +239,24 @@ impl std::fmt::Display for F3Coords {
 /// Deliberately permissive — a token that turns out not to be a number is
 /// thrown away by [`repair_number`], which is a cheaper way to be tolerant
 /// than trying to encode every misreading in the pattern itself.
-const NUMBER: &str = r"[-+~–—−]?[0-9OoIilSsBZzGT.,]+";
+/// Characters that can legitimately appear inside an OCR'd number: the digits
+/// themselves, a decimal separator, and every glyph [`repair_number`] knows how
+/// to map back to a digit.
+///
+/// This must stay in step with `repair_number`'s match arms. It did not, once:
+/// `@` was added to the repair table but not here, so the regex stopped
+/// matching at the `@` in `-1290.50@` and the repair never got a chance to run.
+/// [`tests::the_number_class_and_the_repair_table_agree`] now enforces it.
+macro_rules! number_chars {
+    () => {
+        "0-9OoIilSsBZzGTQD@|!.,"
+    };
+}
+
+const NUMBER: &str = concat!(r"[-+~–—−]?[", number_chars!(), "]+");
+
+#[cfg(test)]
+const NUMBER_CHARS: &str = number_chars!();
 
 /// Whitespace or a comma between two numbers on the `Block:`/`Chunk:` lines.
 const GAP: &str = r"[\s,;]+";
@@ -300,8 +317,12 @@ pub fn repair_number(token: &str) -> Option<f64> {
     for (i, ch) in token.chars().enumerate() {
         let mapped = match ch {
             '0'..='9' | '.' => ch,
-            'O' | 'o' => '0',
-            'I' | 'i' | 'l' => '1',
+            // '@' for '0' is the single most common misread on this overlay:
+            // Tesseract produced "-1290.50@", "6@ fps" and "-5@" from a
+            // rendered F3 panel in `backend_tests`. 'Q' and 'D' go the same
+            // way on rounder faces.
+            'O' | 'o' | '@' | 'Q' | 'D' => '0',
+            'I' | 'i' | 'l' | '|' | '!' => '1',
             'Z' | 'z' => '2',
             'S' | 's' => '5',
             'G' => '6',
@@ -816,6 +837,57 @@ mod tests {
     // -- parsing ------------------------------------------------------------
 
     #[test]
+    fn the_number_class_and_the_repair_table_agree() {
+        // Every character the regex will swallow must be one the repair table
+        // can turn into a digit — otherwise the regex matches a token that
+        // then fails to parse, and the reading is silently dropped. (The
+        // reverse drift is the one that actually bit: a repairable character
+        // missing from the class means the regex stops early and never
+        // produces the token at all.)
+        let mut chars: Vec<char> = Vec::new();
+        let mut it = NUMBER_CHARS.chars().peekable();
+        while let Some(c) = it.next() {
+            if it.peek() == Some(&'-') {
+                // a range like `0-9`
+                it.next();
+                let end = it.next().expect("range needs an end");
+                for c in c..=end {
+                    chars.push(c);
+                }
+            } else {
+                chars.push(c);
+            }
+        }
+        assert!(chars.contains(&'@'), "the class should cover the '@' misread");
+
+        for c in chars {
+            if c == '.' || c == ',' {
+                continue;
+            }
+            let token: String = format!("1{c}");
+            assert!(
+                repair_number(&token).is_some(),
+                "regex accepts {c:?} inside a number but repair_number rejects {token:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn repairs_the_misreads_tesseract_actually_makes() {
+        // Every one of these came out of a real OCR run over a rendered F3
+        // panel, not from a list of plausible-looking substitutions.
+        assert_eq!(repair_number("-1290.50@"), Some(-1290.50));
+        assert_eq!(repair_number("6@"), Some(60.0));
+        assert_eq!(repair_number("-5@"), Some(-50.0));
+        assert_eq!(repair_number("l23"), Some(123.0));
+        assert_eq!(repair_number("|23"), Some(123.0));
+        assert_eq!(repair_number("64.OO"), Some(64.0));
+        // Still refuses things that are not numbers at all.
+        assert_eq!(repair_number("north"), None);
+        assert_eq!(repair_number(""), None);
+    }
+
+    #[test]
     fn reads_the_real_xyz_line() {
         let found = parse_f3_text("XYZ: 123.456 / 64.00000 / -789.012").unwrap();
         assert_eq!(found.source, "xyz");
@@ -1205,5 +1277,97 @@ Biome: minecraft:plains";
         assert!(has_image_extension(Path::new("shot.WebP")));
         assert!(!has_image_extension(Path::new("shot.txt")));
         assert!(!has_image_extension(Path::new("shot")));
+    }
+}
+
+/// End-to-end exercise of the real Tesseract path.
+///
+/// The rest of this module's tests cover parsing and preprocessing as pure
+/// functions, which is most of the risk — but none of them touch `leptess`.
+/// This one renders a synthetic F3 overlay (light monospace on the dark
+/// translucent panel vanilla draws), pushes it through the exact pipeline the
+/// mode uses, and checks the coordinates come back. It only builds under the
+/// `ocr` feature, since that is when the backend exists at all.
+#[cfg(all(test, feature = "ocr"))]
+mod backend_tests {
+    use super::*;
+    use ab_glyph::{FontRef, PxScale};
+    use image::{Rgb, RgbImage};
+
+    /// Draws an F3-style overlay: light grey text on a dark panel.
+    fn render_f3(lines: &[&str]) -> DynamicImage {
+        // Monaco ships with macOS and is a plain TTF, so ab_glyph can read it
+        // directly (Menlo is a .ttc collection, which it cannot).
+        let bytes = std::fs::read("/System/Library/Fonts/Monaco.ttf")
+            .expect("Monaco.ttf should exist on macOS");
+        let font = FontRef::try_from_slice(&bytes).expect("Monaco.ttf should parse");
+
+        let mut img = RgbImage::from_pixel(900, 500, Rgb([28, 32, 40]));
+        // The panel vanilla draws behind the text.
+        for y in 10..(20 + 34 * lines.len() as u32) {
+            for x in 8..880 {
+                img.put_pixel(x, y, Rgb([16, 16, 16]));
+            }
+        }
+        let scale = PxScale::from(28.0);
+        for (i, line) in lines.iter().enumerate() {
+            imageproc::drawing::draw_text_mut(
+                &mut img,
+                Rgb([222, 222, 222]),
+                14,
+                16 + 34 * i as i32,
+                scale,
+                &font,
+                line,
+            );
+        }
+        DynamicImage::ImageRgb8(img)
+    }
+
+    fn read_back(lines: &[&str]) -> Option<F3Coords> {
+        let img = render_f3(lines);
+        let processed = preprocess(
+            &img,
+            CropSpec::Full,
+            Preprocess {
+                // Light text on a dark panel: invert so Tesseract sees the
+                // dark-on-light it expects.
+                invert: true,
+                threshold: 128,
+                scale: 2,
+            },
+        );
+        let png = encode_png(&processed).expect("the processed crop should encode");
+        let mut ocr = backend::Ocr::new().expect("Tesseract should start with eng data present");
+        let text = ocr.text(&png).expect("Tesseract should return text");
+        println!("OCR returned: {text:?}");
+        parse_f3_text(&text)
+    }
+
+    #[test]
+    fn reads_coordinates_out_of_a_rendered_f3_overlay() {
+        let got = read_back(&[
+            "XYZ: 123.456 / 64.00000 / -789.012",
+            "Block: 123 64 -789",
+            "Chunk: 7 4 -50",
+        ])
+        .expect("the pipeline should recover coordinates");
+
+        assert!((got.x - 123.0).abs() < 1.0, "x was {}", got.x);
+        assert!((got.y - 64.0).abs() < 1.0, "y was {}", got.y);
+        assert!((got.z - -789.0).abs() < 1.0, "z was {}", got.z);
+    }
+
+    #[test]
+    fn survives_an_overlay_with_only_the_xyz_line() {
+        let got = read_back(&["XYZ: -1290.500 / 71.00000 / 2048.250"])
+            .expect("a lone XYZ line should still parse");
+        assert!((got.x - -1290.5).abs() < 2.0, "x was {}", got.x);
+        assert!((got.z - 2048.25).abs() < 2.0, "z was {}", got.z);
+    }
+
+    #[test]
+    fn an_overlay_with_no_coordinates_yields_nothing() {
+        assert!(read_back(&["Minecraft 1.21.3", "60 fps T: inf vsync"]).is_none());
     }
 }
