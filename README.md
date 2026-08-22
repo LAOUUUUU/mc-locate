@@ -10,7 +10,56 @@ because the multiplier is odd it is **invertible** — you can step it backwards
 cheaply as forwards. A handful of independent observations is often enough to
 collapse the space to a single seed.
 
-## Build
+## Install
+
+Prebuilt binaries for each release are on the
+[Releases page](../../releases). No Rust toolchain needed — download, unpack,
+run. It is a **terminal program**: there is no window to double-click on macOS
+or Linux; you run it from a shell and drive it with the arrow keys.
+
+### macOS
+
+Pick `mc-locate-macos-apple-silicon.tar.gz` for an M-series Mac, or
+`mc-locate-macos-intel.tar.gz` for an Intel one. Then in Terminal:
+
+```bash
+tar -xzf ~/Downloads/mc-locate-macos-apple-silicon.tar.gz
+xattr -d com.apple.quarantine mc-locate
+./mc-locate
+```
+
+The `xattr` line matters: the binary is not code-signed, so macOS quarantines
+anything downloaded from the internet and will otherwise refuse to run it with
+a message about an unidentified developer.
+
+### Linux
+
+```bash
+tar -xzf mc-locate-linux-x86_64.tar.gz
+chmod +x mc-locate
+./mc-locate
+```
+
+Built against Ubuntu 22.04's glibc, so it also runs on older distributions.
+
+### Windows
+
+Extract `mc-locate-windows-x86_64.zip` and double-click `mc-locate.exe`, which
+opens a console window — or run it from PowerShell:
+
+```powershell
+.\mc-locate.exe
+```
+
+SmartScreen will warn that the publisher is unknown, because the binary is
+unsigned. "More info" then "Run anyway" gets past it.
+
+### Driving it
+
+Arrow keys move the `❯` cursor, Enter selects, Ctrl-C quits. Mode 11 needs no
+setup and is the quickest way to confirm it works.
+
+## Build from source
 
 ```bash
 cargo build --release

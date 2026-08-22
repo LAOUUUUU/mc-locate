@@ -1288,7 +1288,10 @@ Biome: minecraft:plains";
 /// translucent panel vanilla draws), pushes it through the exact pipeline the
 /// mode uses, and checks the coordinates come back. It only builds under the
 /// `ocr` feature, since that is when the backend exists at all.
-#[cfg(all(test, feature = "ocr"))]
+// Gated to macOS as well as the feature: the synthetic overlay is drawn with
+// Monaco, which only ships with macOS. The parser and preprocessing tests that
+// carry most of the risk are platform-independent and always run.
+#[cfg(all(test, feature = "ocr", target_os = "macos"))]
 mod backend_tests {
     use super::*;
     use ab_glyph::{FontRef, PxScale};
