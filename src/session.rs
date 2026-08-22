@@ -23,6 +23,16 @@ impl BBox {
         }
     }
 
+    /// A box from explicit corners, normalising them if given the wrong way round.
+    pub fn around_rect(min_x: i32, min_z: i32, max_x: i32, max_z: i32) -> Self {
+        Self {
+            min_x: min_x.min(max_x),
+            min_z: min_z.min(max_z),
+            max_x: min_x.max(max_x),
+            max_z: min_z.max(max_z),
+        }
+    }
+
     pub fn width(&self) -> i64 {
         (self.max_x as i64 - self.min_x as i64 + 1).max(0)
     }

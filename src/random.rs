@@ -147,6 +147,9 @@ impl JavaRandom {
     pub fn next_int_bound(&mut self, bound: i32) -> i32 {
         assert!(bound > 0, "bound must be positive");
 
+        // Written as the JDK writes it (`(bound & -bound) == bound`) rather
+        // than with `isolate_lowest_one`, so it reads against the Java source.
+        #[allow(clippy::manual_isolate_lowest_one)]
         if (bound & bound.wrapping_neg()) == bound {
             // Power of two: Java takes the high bits instead of a modulo.
             return (((bound as i64).wrapping_mul(self.next(31) as i64)) >> 31) as i32;

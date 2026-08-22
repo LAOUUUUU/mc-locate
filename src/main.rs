@@ -13,7 +13,10 @@ use mc_locate::{
     terrain, ui,
 };
 
-const MODES: &[(&str, fn(&mut Session) -> Result<()>)] = &[
+/// A menu entry: display name, and the function that runs it.
+type Mode = (&'static str, fn(&mut Session) -> Result<()>);
+
+const MODES: &[Mode] = &[
     ("Nether Bedrock Toolkit", bedrock::run),
     ("Overworld Terrain Shape Matcher", terrain::run),
     ("F3 Screenshot OCR Reader", ocr::run),

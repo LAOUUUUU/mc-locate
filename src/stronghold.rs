@@ -318,7 +318,7 @@ pub fn rank_ring_candidates(
     }
 
     // Collapse duplicates from overlapping fan rays, keeping the best score.
-    scored.sort_by(|a, b| (a.1, a.2).cmp(&(b.1, b.2)));
+    scored.sort_by_key(|a| (a.1, a.2));
     scored.dedup_by(|a, b| {
         if a.1 == b.1 && a.2 == b.2 {
             b.0 = b.0.max(a.0);

@@ -676,7 +676,8 @@ fn rms_reprojection(
     let mut sum = 0.0;
     for p in points {
         let pc = r * Vector3::new(p.x, p.y, p.z) + t;
-        if !(pc.z > 1e-6) {
+        // NaN must fail this test too, hence the explicit check.
+        if pc.z.is_nan() || pc.z <= 1e-6 {
             return None;
         }
         let du = f * pc.x / pc.z + cx - p.u;
@@ -723,7 +724,8 @@ fn refine(
         for (i, p) in points.iter().enumerate() {
             let pc = r * Vector3::new(p.x, p.y, p.z) + t;
             let z = pc.z;
-            if !(z > 1e-6) {
+            // NaN must fail this test too, hence the explicit check.
+            if z.is_nan() || z <= 1e-6 {
                 return None;
             }
             res[2 * i] = f * pc.x / z + cx - p.u;
@@ -818,7 +820,8 @@ fn refine(
     for p in points {
         let pw = Vector3::new(p.x, p.y, p.z);
         let pc = r * pw + t;
-        if !(pc.z > 1e-6) {
+        // NaN must fail this test too, hence the explicit check.
+        if pc.z.is_nan() || pc.z <= 1e-6 {
             return None;
         }
         let du = f * pc.x / pc.z + cx - p.u;
@@ -868,7 +871,8 @@ fn sum_squares(
     let mut sum = 0.0;
     for p in points {
         let pc = r * Vector3::new(p.x, p.y, p.z) + t;
-        if !(pc.z > 1e-6) {
+        // NaN must fail this test too, hence the explicit check.
+        if pc.z.is_nan() || pc.z <= 1e-6 {
             return None;
         }
         let du = f * pc.x / pc.z + cx - p.u;

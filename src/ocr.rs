@@ -53,23 +53,18 @@ pub fn has_image_extension(path: &Path) -> bool {
 /// scale, so this has to be configurable. [`CropSpec::Fraction`] is the form
 /// that survives a resolution change halfway through a folder of screenshots,
 /// which pixel rectangles do not.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum CropSpec {
     /// The whole image.
     Full,
     /// The top-left quadrant, which is where vanilla draws the XYZ block.
+    #[default]
     TopLeftQuadrant,
     /// An explicit pixel rectangle.
     Pixels { x: u32, y: u32, w: u32, h: u32 },
     /// A rectangle given as fractions (0.0–1.0) of the image's width and
     /// height.
     Fraction { x: f64, y: f64, w: f64, h: f64 },
-}
-
-impl Default for CropSpec {
-    fn default() -> Self {
-        CropSpec::TopLeftQuadrant
-    }
 }
 
 impl CropSpec {

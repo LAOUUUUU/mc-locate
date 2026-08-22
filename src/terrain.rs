@@ -622,7 +622,7 @@ mod tests {
     #[test]
     fn empty_and_all_unknown_patterns_are_rejected() {
         assert!(BiomePattern::parse(&[], VERSION).is_err());
-        assert!(BiomePattern::parse(&vec!["? ? ?".to_string()], VERSION).is_err());
+        assert!(BiomePattern::parse(&["? ? ?".to_string()], VERSION).is_err());
     }
 
     #[test]

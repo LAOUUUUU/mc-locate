@@ -56,7 +56,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::grid::{Cell, Grid};
 use crate::random::JavaRandom;
-use crate::session::{BedrockObservation, Session};
+use crate::session::{BBox, BedrockObservation, Session};
 use crate::ui;
 
 /// `"minecraft:bedrock_floor".hashCode()`.
@@ -282,14 +282,12 @@ impl Pattern {
 pub fn search_area(
     pattern: &Pattern,
     layer_seed: u64,
-    min_x: i32,
-    min_z: i32,
-    max_x: i32,
-    max_z: i32,
+    area: BBox,
     scanned: &AtomicU64,
     cancel: &AtomicBool,
     limit: usize,
 ) -> Vec<(i32, i32)> {
+    let (min_x, min_z, max_x, max_z) = (area.min_x, area.min_z, area.max_x, area.max_z);
     let rows: Vec<i32> = (min_z..=max_z).collect();
     let width = (max_x as i64 - min_x as i64 + 1).max(0) as u64;
 
@@ -464,10 +462,7 @@ fn run_locate(session: &mut Session) -> Result<()> {
         let hits = search_area(
             &pattern,
             seeds.for_surface(surface),
-            bbox.min_x,
-            bbox.min_z,
-            bbox.max_x,
-            bbox.max_z,
+            bbox,
             &scanned,
             &cancel,
             limit,
@@ -495,7 +490,7 @@ fn run_locate(session: &mut Session) -> Result<()> {
 
     if hits.len() == 1 && ui::confirm("Store the overworld equivalent as the session search box?", true)? {
         let (ox, oz) = crate::portal::nether_to_overworld(hits[0].0, hits[0].1);
-        session.search_box = Some(crate::session::BBox::around(ox, oz, 128));
+        session.search_box = Some(BBox::around(ox, oz, 128));
         ui::success("Stored.");
     }
     Ok(())
@@ -806,10 +801,7 @@ mod tests {
         let hits = search_area(
             &pattern,
             seeds.floor,
-            ox - 60,
-            oz - 60,
-            ox + 60,
-            oz + 60,
+            BBox::around_rect(ox - 60, oz - 60, ox + 60, oz + 60),
             &scanned,
             &cancel,
             64,
@@ -877,8 +869,8 @@ mod tests {
 
     #[test]
     fn false_positive_rate_tracks_pattern_size() {
-        let small = Grid::parse(&vec!["#".to_string()]).unwrap();
-        let big = Grid::parse(&vec!["####".to_string()]).unwrap();
+        let small = Grid::parse(&["#".to_string()]).unwrap();
+        let big = Grid::parse(&["####".to_string()]).unwrap();
         let ps = Pattern::from_grid(&small, 4).unwrap();
         let pb = Pattern::from_grid(&big, 4).unwrap();
         assert!((ps.false_positive_rate() - 0.2).abs() < 1e-6);
