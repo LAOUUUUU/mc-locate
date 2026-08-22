@@ -84,11 +84,20 @@ pub fn is_slime_chunk_with_offset(seed: i64, offset: i64) -> bool {
 /// against cheaply.
 #[derive(Debug, Clone)]
 pub struct SlimeConstraints {
-    /// `(precomputed offset, expected result)`, ordered so the most selective
-    /// tests run first.
-    tests: Vec<(i64, bool)>,
+    /// One entry per observation, ordered so the most selective tests run
+    /// first. The chunk coordinates are carried along purely so a failing
+    /// constraint can name itself when explaining a candidate.
+    tests: Vec<SlimeTest>,
     positives: usize,
     negatives: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SlimeTest {
+    offset: i64,
+    expected: bool,
+    chunk_x: i32,
+    chunk_z: i32,
 }
 
 impl SlimeConstraints {
@@ -111,15 +120,20 @@ impl SlimeConstraints {
             }
         }
 
-        let mut tests: Vec<(i64, bool)> = observations
+        let mut tests: Vec<SlimeTest> = observations
             .iter()
-            .map(|o| (slime_offset(o.chunk_x, o.chunk_z), o.is_slime))
+            .map(|o| SlimeTest {
+                offset: slime_offset(o.chunk_x, o.chunk_z),
+                expected: o.is_slime,
+                chunk_x: o.chunk_x,
+                chunk_z: o.chunk_z,
+            })
             .collect();
 
         // Positive observations reject 90% of seeds each; negatives only 10%.
         // Running positives first means almost every candidate dies on the
         // first test, which roughly halves total work.
-        tests.sort_by_key(|(_, is_slime)| !*is_slime);
+        tests.sort_by_key(|t| !t.expected);
 
         let positives = observations.iter().filter(|o| o.is_slime).count();
         let negatives = observations.len() - positives;
@@ -133,12 +147,35 @@ impl SlimeConstraints {
 
     #[inline(always)]
     pub fn accepts(&self, seed: i64) -> bool {
-        for (offset, expected) in &self.tests {
-            if is_slime_chunk_with_offset(seed, *offset) != *expected {
+        for t in &self.tests {
+            if is_slime_chunk_with_offset(seed, t.offset) != t.expected {
                 return false;
             }
         }
         true
+    }
+
+    /// Per-observation pass/fail for one seed, without short-circuiting.
+    ///
+    /// [`SlimeConstraints::accepts`] stops at the first failure because that is
+    /// the fast path; explaining a candidate needs the whole picture, so this
+    /// deliberately evaluates every test.
+    pub fn explain(&self, seed: i64) -> Vec<(String, bool)> {
+        self.tests
+            .iter()
+            .map(|t| {
+                let got = is_slime_chunk_with_offset(seed, t.offset);
+                (
+                    format!(
+                        "chunk ({}, {}) is {}a slime chunk",
+                        t.chunk_x,
+                        t.chunk_z,
+                        if t.expected { "" } else { "not " }
+                    ),
+                    got == t.expected,
+                )
+            })
+            .collect()
     }
 
     pub fn len(&self) -> usize {
@@ -705,7 +742,7 @@ mod tests {
             SlimeObservation { chunk_x: 2, chunk_z: 2, is_slime: true },
         ];
         let c = SlimeConstraints::new(&obs).unwrap();
-        assert!(c.tests[0].1, "the positive constraint should be tested first");
+        assert!(c.tests[0].expected, "the positive constraint should be tested first");
     }
 
     #[test]

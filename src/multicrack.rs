@@ -258,6 +258,50 @@ impl ConstraintSet {
         keep
     }
 
+    /// Per-constraint pass/fail for one seed, evaluating all of them.
+    ///
+    /// [`ConstraintSet::accepts`] short-circuits on the first failure, which is
+    /// what makes the sweep fast but tells you nothing about *why* a candidate
+    /// was kept or dropped. This runs everything so a near-miss can be shown
+    /// as "142 of 147" with the three failures named — usually the fastest way
+    /// to spot a mis-typed coordinate.
+    pub fn explain(&self, structure_seed: i64) -> Vec<(String, bool)> {
+        let mut out = Vec::new();
+
+        if let Some(s) = &self.slime {
+            out.extend(s.explain(structure_seed));
+        }
+
+        for c in &self.structures {
+            let ok = match c.region.get_structure_generation_attempt(structure_seed) {
+                Some(pos) => {
+                    (pos.x - c.x).abs() <= c.tolerance && (pos.z - c.z).abs() <= c.tolerance
+                }
+                None => false,
+            };
+            out.push((format!("{} at ({}, {})", c.label, c.x, c.z), ok));
+        }
+
+        if !self.bedrock.is_empty() {
+            let seeds = bedrock::layer_seeds(structure_seed);
+            for o in &self.bedrock {
+                let got = bedrock::is_bedrock(&seeds, o.x, o.y, o.z);
+                out.push((
+                    format!(
+                        "({}, {}, {}) is {}bedrock",
+                        o.x,
+                        o.y,
+                        o.z,
+                        if o.is_bedrock { "" } else { "not " }
+                    ),
+                    got == o.is_bedrock,
+                ));
+            }
+        }
+
+        out
+    }
+
     /// Tests a structure seed against everything, cheapest constraint first.
     #[inline]
     pub fn accepts(&self, structure_seed: i64) -> bool {
@@ -742,6 +786,25 @@ fn report(session: &mut Session, version: Version, found: Vec<i64>) -> Result<()
     }
 
     session.candidates = found.clone();
+
+    // A near miss is the common failure and the hardest to diagnose from a
+    // bare list of numbers, so offer the per-constraint breakdown here rather
+    // than making the user go and find mode 12.
+    if ui::confirm("Show which constraints each result matched?", found.len() <= 8)? {
+        let constraints = ConstraintSet::build(session, version, 16)?;
+        for seed in found.iter().take(8) {
+            let results = constraints.explain(*seed);
+            let passed = results.iter().filter(|(_, ok)| *ok).count();
+            println!();
+            ui::note(&format!("{seed}: {passed}/{} matched", results.len()));
+            for (label, ok) in results.iter().filter(|(_, ok)| !*ok) {
+                println!("    \x1b[31m✗\x1b[0m {label}");
+                let _ = ok;
+            }
+        }
+        println!();
+        ui::note("Mode 12 explains any seed in full, and suggests what to observe next.");
+    }
 
     println!();
     ui::note(

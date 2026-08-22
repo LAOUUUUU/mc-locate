@@ -39,7 +39,7 @@ enough to collapse the space to a single seed.
 
 |  |  |
 |---|---|
-| **11 modes** | seed cracking, coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
+| **12 modes** | seed cracking, coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
 | **212 tests** | every RNG formula checked against an independent source, not from memory |
 | **3 platforms** | one universal macOS binary, Linux x86_64, Windows x86_64 |
 | **No setup** | no Rust, no Java, no Minecraft install needed to run it |
@@ -141,6 +141,7 @@ type it once.
 | 9 | Multi-Source Seed Cracker | Any mix of End pillars, structures, slime chunks, bedrock | The master mode — see below |
 | 10 | Stronghold Ring Triangulator | Player X/Z and yaw per eye-of-ender throw | Throw an eye, then F3 + C and read position and `Facing` |
 | 11 | Nether ↔ Overworld Portal Converter | One coordinate and its dimension | Anywhere. Pure arithmetic, no search |
+| 12 | Observation Advisor | Whatever you already have | Nothing new — it tells you what to go and look at next, and explains why a candidate survives |
 
 ### Mode 9: three routes to a seed
 
@@ -311,6 +312,47 @@ starts:
 | Mode 4 full space | 2⁴⁸ | ~a day on 8 cores; use a range or mode 9 |
 | Mode 1b full space | 2⁴⁸ | Same; ranged or candidate-filtered instead |
 | Mode 1a full world border | ~3.6 × 10¹⁵ positions | No. Narrow with mode 11 or 6 first |
+
+### Mode 12: what to look at next
+
+The other modes answer "here is what I saw, what does it mean?". This one runs
+the question backwards.
+
+**With a candidate list**, the advice is exact rather than modelled. Any
+proposed observation partitions your candidates into the ones that would say
+yes and the ones that would say no; a 50/50 split is worth a full bit and
+halves the list, a 99/1 split is worth almost nothing. So it evaluates real
+candidate seeds against real nearby positions and ranks by the actual split:
+
+```text
+Best next observations, by how evenly they split your candidates:
+   1. Look at nether floor block (-118, 4, 47)
+        0.998 bits  ->  about 1041 candidates left (49.9% eliminated)  [from a screenshot]
+   2. Check whether chunk (12, -41) is a slime chunk
+        0.471 bits  ->  about 1614 candidates left (22.3% eliminated)  [travel or waiting]
+```
+
+**Without one**, there is nothing to partition, so it ranks by a-priori
+information content: End pillars 16 bits, a structure origin ~9, a bedrock
+block 0.72, a slime chunk 0.47, a *non*-slime chunk 0.15. Effort is tracked
+separately and derived from each structure's region size, so a woodland mansion
+is not advertised as a short trip just because it carries a lot of information.
+
+It also **explains any candidate**: rather than short-circuiting at the first
+failure the way the cracking hot path does, it evaluates every constraint and
+reports which matched.
+
+```text
+Seed 12840895245824: 146 of 147 constraints matched.
+  ✓ chunk (12, -41) is a slime chunk
+  ✓ Desert pyramid at (1384, -2952)
+  ✗ (11, 4, -97) is bedrock
+
+  A near miss — only 1 constraint failed. That pattern usually means a
+  mis-typed coordinate in those specific observations rather than a wrong seed.
+```
+
+Mode 9 offers the same breakdown inline on its results.
 
 ## Built on
 

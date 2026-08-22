@@ -1,3 +1,4 @@
+pub mod advisor;
 pub mod bedrock;
 pub mod compass;
 pub mod grid;

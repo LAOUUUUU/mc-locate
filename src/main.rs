@@ -9,8 +9,8 @@
 use anyhow::Result;
 use mc_locate::session::Session;
 use mc_locate::{
-    bedrock, compass, logscrape, multicrack, ocr, portal, pose, slime, stronghold, structure,
-    terrain, ui,
+    advisor, bedrock, compass, logscrape, multicrack, ocr, portal, pose, slime, stronghold,
+    structure, terrain, ui,
 };
 
 /// A menu entry: display name, and the function that runs it.
@@ -28,6 +28,7 @@ const MODES: &[Mode] = &[
     ("Multi-Source Seed Cracker (combine everything)", multicrack::run),
     ("Stronghold Ring Triangulator (Bayesian)", stronghold::run),
     ("Nether <-> Overworld Portal Converter", portal::run),
+    ("Observation Advisor (what to look at next)", advisor::run),
 ];
 
 fn banner() {
