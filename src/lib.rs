@@ -10,6 +10,7 @@ pub mod ocr;
 pub mod pose;
 pub mod portal;
 pub mod random;
+pub mod reverser;
 pub mod session;
 pub mod slime;
 pub mod stronghold;

@@ -59,10 +59,11 @@ type it once.
 | 10 | Stronghold Ring Triangulator | Player X/Z and yaw per eye-of-ender throw | Throw an eye, then F3 + C and read position and `Facing` |
 | 11 | Nether ↔ Overworld Portal Converter | One coordinate and its dimension | Anywhere. Pure arithmetic, no search |
 
-### Mode 9 and the End pillar shortcut
+### Mode 9: three routes to a seed
 
-Mode 9 is the one to aim for. It intersects independent constraints instead of
-brute-forcing any single one, which is how SeedCrackerX works.
+Mode 9 intersects independent constraints instead of brute-forcing any single
+one, which is how SeedCrackerX works. There are three ways in, in rough order
+of how much walking they cost you.
 
 The highest-value observation in the game is the **End pillar arrangement**:
 
@@ -78,13 +79,60 @@ the LCG is invertible, mc-locate *enumerates* exactly the 2³² structure seeds
 consistent with it and steps backwards to each one — instead of testing 2⁴⁸.
 That turns a multi-day sweep into minutes.
 
-So: **go to the End, record the ten pillar heights, and start from there.**
-Without pillar data the space is 2⁴⁸ and the tool says so plainly rather than
-starting a search that will not finish.
+**Route 2 — structures alone, by bit-lifting.** No End trip needed. A
+structure's in-region offset comes from `nextInt(chunkRange)`, and when `2^j`
+divides `chunkRange` the identity `v % chunkRange ≡ v (mod 2^j)` means
+
+```text
+offset mod 2^j  ==  bits 17..17+j-1 of the LCG state
+```
+
+Low bits of a product never depend on high bits, so those bits are fixed by the
+low `17 + j` bits of the seed alone. Sieve that small space against every
+observation, then sweep the remaining high bits. Desert pyramids, igloos and
+swamp huts have `chunkRange` 24, so `j = 3` and the sieve is 2²⁰ wide; four or
+five of them usually leave a single survivor and a ~2²⁸ sweep. Ocean monuments
+(range 27, odd) and anything on the power-of-two `nextInt` branch leak nothing
+this way and are used only in the final check.
+
+**Route 3 — lattice reduction, for single-generator observations.** See below.
 
 Structure seeds are the low 48 bits. Structures, slime chunks and bedrock depend
 only on those, so 65,536 world seeds share each one; mode 9 separates them with
 biome observations at the end.
+
+## Lattice reduction (`lll.rs`, `reverser.rs`)
+
+A port of the idea behind [LattiCG](https://github.com/mjtb49/LattiCG), for the
+case it actually addresses: **many observations of one `Random`**, rather than
+one observation each of many.
+
+Every observation says "the 48-bit state at call `k` lies in `[lo, hi]`". Since
+`state_k = s·a^(k−k₀) + c_(k−k₀) (mod 2⁴⁸)`, the set of possible state vectors
+is a lattice, and seed-finding becomes "which lattice points sit inside this
+box". LLL-reduce, enumerate, done — cost proportional to the number of
+*answers* rather than to 2⁴⁸.
+
+Details worth knowing:
+
+- **Exact rationals throughout** (`num-bigint`/`num-rational`). Floating-point
+  LLL silently drops solutions, which is the one failure mode you cannot detect
+  from the output.
+- **Enumeration is Fincke–Pohst, not LattiCG's LP.** LattiCG tightens each
+  branch with an exact-rational simplex. We instead enumerate the ball
+  circumscribing the box and filter. Same completeness, much less machinery to
+  get provably right; the price is a wider search tree. Every square root is
+  bounded *outward* so intervals are never too narrow.
+- **Not everything is a box.** `nextInt(n)` for non-power-of-two `n` is a
+  modular condition, and "this block was mossy" is the complement of an
+  interval. Neither goes into the lattice; both become filters replayed over
+  each candidate. The lattice therefore never excludes a real answer.
+- **Dungeons are the natural application** — `nextInt(16)`, `nextInt(16)`,
+  `nextInt(height)`, then one `nextInt(4)` per floor block. On the versions
+  where dungeon cracking applies (through 1.17, which is also where
+  SeedCrackerX stops) the world height is 256, so every bound is a power of two
+  and the whole query reduces to clean intervals. From 1.18 the height is 384,
+  which is not, so that call would fall back to a replay filter.
 
 ## What is verified, and against what
 
@@ -152,9 +200,13 @@ Stated plainly rather than papered over:
   A full sweep needs the layered filter tree from Nether_Bedrock_Cracker. What
   is here is exact verification that composes with mode 9's pillar shortcut,
   which is the path that actually finishes.
-- **No LattiCG.** The lattice-reduction reversal that makes sparse constraints
-  cheap is not ported; mode 9 uses candidate-set intersection, which is
-  legitimate and sufficient given the pillar shortcut.
+- **The lattice reverser is not yet wired to a live dungeon.** Recovering a
+  world seed from a dungeon needs one more step after the decorator seed:
+  inverting `setPopulationSeed`, where
+  `populationSeed = (blockX·a + blockZ·b) ^ worldSeed` with `a` and `b`
+  themselves derived from the world seed. That is its own algorithm
+  (mjtb49's `ChunkRandomReverser`) and is not implemented. The reverser itself
+  is complete and tested against dungeon-shaped queries.
 - **Mode 10 is a simpler model than Ninjabrain-Bot.** It does model the
   "eye points at the nearest stronghold" constraint, which matters — without it
   a far stronghold that happens to sit along the same bearing can take a third
