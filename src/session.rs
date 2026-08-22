@@ -90,7 +90,17 @@ pub struct StructureObservation {
 #[derive(Debug, Default)]
 pub struct Session {
     pub seed: Option<i64>,
+    /// The Minecraft version, when the bundled generator can generate it.
     pub version: Option<Version>,
+    /// A version *newer* than the generator supports, recorded verbatim.
+    ///
+    /// Minecraft outruns the worldgen library — cubiomes stops at 1.21.4 while
+    /// the game is on 26.x. Without somewhere to put that, a player on a newer
+    /// version has to pick the closest supported one, and every
+    /// structure-and-biome answer is then silently wrong. Recording it lets
+    /// generator-backed modes refuse outright while the version-independent
+    /// ones (slime chunks, nether bedrock, End pillars, portal maths) carry on.
+    pub newer_version: Option<String>,
     /// Absolute compass heading in degrees, as Minecraft yaw
     /// (0 = +Z / south, 90 = -X / west, 180 = -Z / north, 270 = +X / east).
     pub heading: Option<f64>,
@@ -118,6 +128,8 @@ impl Session {
         }
         if let Some(v) = self.version {
             out.push(("mc", v.label().to_string()));
+        } else if let Some(v) = &self.newer_version {
+            out.push(("mc", format!("{v} (unsupported)")));
         }
         if let Some(h) = self.heading {
             out.push(("heading", format!("{h:.1}°")));

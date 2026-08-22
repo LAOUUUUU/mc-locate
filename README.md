@@ -426,6 +426,17 @@ for the plan to reach current Minecraft.
 Note that **1.21.4 is what cubiomes calls "1.21 WD"** — the constant was written
 before the Winter Drop shipped and never renamed.
 
+**Newer than 1.21.4?** Pick "Newer than 1.21.4" in the version menu and say
+which. Modes that generate world data refuse it outright rather than
+substituting the closest supported version and giving confident, wrong answers.
+Everything that does not consult the generator keeps working on any version:
+
+* **Slime chunks** (mode 4) — those constants are unchanged since Beta 1.4
+* **Nether bedrock** (mode 1) — the 1.18+ per-position formula
+* **End pillars** and the seed maths in mode 9, **portal conversion** (mode 11)
+
+So a 26.x world can still be cracked from slime chunks and bedrock today.
+
 Older versions carry real differences the tool accounts for rather than
 papering over:
 

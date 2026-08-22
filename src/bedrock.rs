@@ -355,7 +355,9 @@ pub fn run(session: &mut Session) -> Result<()> {
 fn run_locate(session: &mut Session) -> Result<()> {
     ui::header("1a — Coordinates from a bedrock pattern");
 
-    let version = ui::prompt_version(session)?;
+    // Only the 1.18 boundary matters here, not anything cubiomes generates, so
+    // a version past the generator's ceiling is perfectly usable.
+    let version = ui::prompt_version_any(session)?;
     if !version.is_1_18_plus() {
         ui::warn(&format!(
             "Nether bedrock is not seed-dependent in {}.",
@@ -402,7 +404,8 @@ fn run_locate(session: &mut Session) -> Result<()> {
     ));
 
     let fpr = pattern.false_positive_rate();
-    let border = version.world_border() as f64;
+    // The border has been 29,999,984 since 1.8 and is not version-specific here.
+    let border = 29_999_984f64;
     let expected_full_world = fpr * (2.0 * border) * (2.0 * border);
     ui::note(&format!(
         "Chance a random position matches: 1 in {:.0}. Across the whole world that is about \
@@ -510,7 +513,7 @@ fn benchmark_locate(pattern: &Pattern, layer_seed: u64) -> f64 {
 fn run_crack(session: &mut Session) -> Result<()> {
     ui::header("1b — Seed crack from bedrock observations");
 
-    let version = ui::prompt_version(session)?;
+    let version = ui::prompt_version_any(session)?;
     if !version.is_1_18_plus() {
         ui::warn(&format!(
             "Nether bedrock only became seed-dependent in 1.18; {} carries no seed information \

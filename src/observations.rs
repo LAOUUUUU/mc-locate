@@ -53,6 +53,12 @@ pub struct ObservationFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<i64>,
 
+    /// Set when the session's version is past what the generator supports.
+    /// Recorded so a saved session round-trips honestly rather than silently
+    /// losing the fact that it is a 26.x world.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsupported_version: Option<String>,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heading: Option<f64>,
 
@@ -138,6 +144,7 @@ impl ObservationFile {
             format: FORMAT_TAG.to_string(),
             version: FORMAT_VERSION,
             minecraft_version: session.version.map(|v| v.label().to_string()),
+            unsupported_version: session.newer_version.clone(),
             seed: session.seed,
             heading: session.heading,
             search_box: session.search_box.map(|b| BoxDto {
@@ -200,6 +207,11 @@ impl ObservationFile {
                     "unknown Minecraft version {label:?} in file; leaving the session's alone"
                 )),
             }
+        }
+        if let Some(v) = &self.unsupported_version
+            && (overwrite || session.newer_version.is_none())
+        {
+            session.newer_version = Some(v.clone());
         }
         if let Some(s) = self.seed
             && (overwrite || session.seed.is_none())
@@ -360,6 +372,7 @@ impl ObservationFile {
             && self.candidates.is_empty()
             && self.pillar_heights.is_none()
             && self.minecraft_version.is_none()
+            && self.unsupported_version.is_none()
     }
 }
 
@@ -435,6 +448,7 @@ mod tests {
             pillar_heights: Some([
                 Some(76), None, Some(82), None, None, Some(94), None, None, None, Some(103),
             ]),
+            newer_version: None,
         }
     }
 
@@ -457,6 +471,27 @@ mod tests {
             ..Default::default()
         };
         assert!(!ObservationFile::from_session(&heading_only, None).is_empty());
+    }
+
+    #[test]
+    fn an_unsupported_version_survives_a_save_and_load() {
+        // A 26.x session must not come back looking like it has no version at
+        // all, or the next run silently offers generator-backed modes.
+        let session = Session {
+            newer_version: Some("26.2".to_string()),
+            bedrock: vec![BedrockObservation { x: 1, y: 4, z: 2, is_bedrock: true }],
+            ..Default::default()
+        };
+        let json = ObservationFile::from_session(&session, None).to_json().unwrap();
+        assert!(json.contains("26.2"));
+
+        let mut back = Session::default();
+        ObservationFile::from_json(&json)
+            .unwrap()
+            .apply_to_session(&mut back, false)
+            .unwrap();
+        assert_eq!(back.newer_version.as_deref(), Some("26.2"));
+        assert_eq!(back.version, None);
     }
 
     #[test]
