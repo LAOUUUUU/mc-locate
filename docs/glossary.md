@@ -43,6 +43,10 @@ from one needs an extra inversion step that mc-locate does not yet implement.
 reverse many observations of a *single* `Random` at once, rather than testing
 seeds one by one.
 
+**Winter Drop / 1.21.4** — cubiomes names this version `MC_1_21_WD` with the
+comment "version TBA", because the constant predates the release. It is 1.21.4,
+"The Garden Awakens" (December 2024). mc-locate labels it 1.21.4.
+
 **cubiomes** — Cubitect's C library that reproduces Minecraft biome and
 structure generation. Every version-specific constant in mc-locate comes from
 it, deliberately, so nothing is hand-rolled from memory.
