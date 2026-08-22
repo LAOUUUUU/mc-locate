@@ -149,7 +149,11 @@ impl JavaRandom {
 
         // Written as the JDK writes it (`(bound & -bound) == bound`) rather
         // than with `isolate_lowest_one`, so it reads against the Java source.
-        #[allow(clippy::manual_isolate_lowest_one)]
+        //
+        // `unknown_lints` is allowed alongside it because the clippy lint being
+        // suppressed is recent: older toolchains reject the name outright, and
+        // CI runners are not always on the newest Rust.
+        #[allow(unknown_lints, clippy::manual_isolate_lowest_one)]
         if (bound & bound.wrapping_neg()) == bound {
             // Power of two: Java takes the high bits instead of a modulo.
             return (((bound as i64).wrapping_mul(self.next(31) as i64)) >> 31) as i32;
