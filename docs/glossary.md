@@ -47,6 +47,8 @@ seeds one by one.
 comment "version TBA", because the constant predates the release. It is 1.21.4,
 "The Garden Awakens" (December 2024). mc-locate labels it 1.21.4.
 
-**cubiomes** — Cubitect's C library that reproduces Minecraft biome and
-structure generation. Every version-specific constant in mc-locate comes from
-it, deliberately, so nothing is hand-rolled from memory.
+**cubiomes** — the C library that reproduces Minecraft biome and structure
+generation. Every version-specific constant in mc-locate comes from it,
+deliberately, so nothing is hand-rolled from memory. mc-locate builds against
+`xpple/cubiomes`, a maintained fork reaching 26.2; Cubitect's original has been
+dormant since November 2024 and stops at 1.21.4.

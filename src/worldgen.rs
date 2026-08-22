@@ -55,11 +55,23 @@ pub enum Version {
     V1_21_1,
     V1_21_3,
     V1_21_4,
+    V1_21_5,
+    V1_21_6,
+    V1_21_9,
+    V1_21_11,
+    V26_1,
+    V26_2,
 }
 
 impl Version {
     /// Menu order — newest first, since that is what most users want.
-    pub const ALL: [Version; 28] = [
+    pub const ALL: [Version; 34] = [
+        Version::V26_2,
+        Version::V26_1,
+        Version::V1_21_11,
+        Version::V1_21_9,
+        Version::V1_21_6,
+        Version::V1_21_5,
         Version::V1_21_4,
         Version::V1_21_3,
         Version::V1_21_1,
@@ -92,6 +104,14 @@ impl Version {
 
     pub fn label(&self) -> &'static str {
         match self {
+            // From 2026 Minecraft numbers releases by year rather than 1.x;
+            // there is no 1.22, the line runs 1.21.11 -> 26.1 -> 26.2.
+            Version::V26_2 => "26.2",
+            Version::V26_1 => "26.1",
+            Version::V1_21_11 => "1.21.11",
+            Version::V1_21_9 => "1.21.9",
+            Version::V1_21_6 => "1.21.6",
+            Version::V1_21_5 => "1.21.5",
             // cubiomes calls 1.21.4 "1.21 WD" because the constant was written
             // before the Winter Drop shipped and never renamed. It is 1.21.4,
             // "The Garden Awakens", and is labelled that way here.
@@ -128,6 +148,12 @@ impl Version {
 
     pub fn mc(&self) -> MCVersion {
         match self {
+            Version::V26_2 => MCVersion::MC_26_2,
+            Version::V26_1 => MCVersion::MC_26_1,
+            Version::V1_21_11 => MCVersion::MC_1_21_11,
+            Version::V1_21_9 => MCVersion::MC_1_21_9,
+            Version::V1_21_6 => MCVersion::MC_1_21_6,
+            Version::V1_21_5 => MCVersion::MC_1_21_5,
             Version::V1_21_4 => MCVersion::MC_1_21_WD,
             Version::V1_21_3 => MCVersion::MC_1_21_3,
             Version::V1_21_1 => MCVersion::MC_1_21_1,
@@ -571,7 +597,7 @@ mod tests {
 
     #[test]
     fn every_version_is_listed_once_and_maps_somewhere_distinct() {
-        assert_eq!(Version::ALL.len(), 28);
+        assert_eq!(Version::ALL.len(), 34);
 
         let mut labels: Vec<&str> = Version::ALL.iter().map(|v| v.label()).collect();
         let n = labels.len();
@@ -592,7 +618,7 @@ mod tests {
         for pair in ords.windows(2) {
             assert!(pair[0] > pair[1], "ALL is not descending: {ords:?}");
         }
-        assert_eq!(Version::ALL[0], Version::V1_21_4);
+        assert_eq!(Version::ALL[0], Version::V26_2);
         assert_eq!(Version::ALL[Version::ALL.len() - 1], Version::B1_7);
     }
 
@@ -608,6 +634,63 @@ mod tests {
         assert_eq!(Version::V1_9_4.stronghold_count(), 128);
         assert!(!Version::V1_8_9.has_stronghold_rings());
         assert!(Version::V1_9_4.has_stronghold_rings());
+    }
+
+    #[test]
+    fn the_backend_reaches_current_minecraft() {
+        // The point of vendoring the maintained fork. If this regresses, the
+        // patch in Cargo.toml has stopped taking effect.
+        assert_eq!(Version::ALL[0].label(), "26.2");
+        for v in [Version::V1_21_5, Version::V1_21_11, Version::V26_1, Version::V26_2] {
+            let world = WorldGen::overworld(v, 1234);
+            assert!(
+                world.biome_at(0, 63, 0).is_ok(),
+                "{} could not generate a biome",
+                v.label()
+            );
+            assert_eq!(world.strongholds().len(), 128, "{}", v.label());
+        }
+    }
+
+    #[test]
+    fn twenty_six_two_really_generates_differently_from_its_predecessor() {
+        // A version that silently aliased an older one would pass every other
+        // test while generating the wrong world.
+        //
+        // The difference is *underground*: 26.2 ("Chaos Cubed") adds
+        // sulfur_caves, biome id 187. Surface biomes are unchanged, so an
+        // earlier version of this test sampled y=63, found nothing, and looked
+        // like a broken backend. y=10 is where it shows.
+        const SULFUR_CAVES: i32 = 187;
+
+        let sample = |v: Version, y: i32| {
+            let w = WorldGen::overworld(v, 4242);
+            (0..60)
+                .map(|i| w.biome_at(i * 256, y, i * 192).map(|b| b as i32).unwrap_or(-1))
+                .collect::<Vec<i32>>()
+        };
+        assert_ne!(
+            sample(Version::V1_21_4, 10),
+            sample(Version::V26_2, 10),
+            "26.2 generates identically to 1.21.4 underground — is the patch active?"
+        );
+
+        // And the new biome is actually reachable there, and only there.
+        let modern = WorldGen::overworld(Version::V26_2, 4242);
+        let legacy = WorldGen::overworld(Version::V1_21_4, 4242);
+        let mut modern_hits = 0;
+        for i in 0..300 {
+            let (x, z) = (i * 128, i * 97);
+            if modern.biome_at(x, 10, z).map(|b| b as i32).unwrap_or(-1) == SULFUR_CAVES {
+                modern_hits += 1;
+            }
+            assert_ne!(
+                legacy.biome_at(x, 10, z).map(|b| b as i32).unwrap_or(-1),
+                SULFUR_CAVES,
+                "1.21.4 must never produce a 26.2 biome"
+            );
+        }
+        assert!(modern_hits > 0, "sulfur_caves should be reachable in 26.2");
     }
 
     #[test]

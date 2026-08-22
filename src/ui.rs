@@ -447,7 +447,28 @@ mod tests {
     fn the_newest_supported_version_is_the_top_of_the_menu() {
         // prompt_version's refusal message quotes this, so it must not drift.
         assert_eq!(newest_supported(), Version::ALL[0]);
-        assert_eq!(newest_supported().label(), "1.21.4");
+    }
+
+    #[test]
+    fn the_backend_has_not_regressed_below_current_minecraft() {
+        // A drift guard in the other direction from the version menu.
+        //
+        // The whole tool's correctness rests on the bundled generator knowing
+        // the version being generated; picking a nearby one silently produces
+        // the wrong world. If a dependency change quietly reverts the backend
+        // to the dormant upstream (which stops at 1.21.4), every
+        // structure-and-biome answer for a modern world becomes wrong with no
+        // other symptom. This fails loudly instead.
+        //
+        // Minecraft was on 26.2 as of 2026-08-22. When the game moves ahead of
+        // the generator again this test still passes — it only catches going
+        // *backwards*. Raise the bound when the backend gains a newer version.
+        assert!(
+            newest_supported().at_least(cubiomes::enums::MCVersion::MC_26_2),
+            "the worldgen backend only reaches {}, below the 26.2 it should support — \
+             has the cubiomes patch in Cargo.toml stopped applying?",
+            newest_supported().label()
+        );
     }
 
     #[test]

@@ -48,3 +48,15 @@ java_random = "0.1.7"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+# The published cubiomes crates vendor Cubitect's C library, which has been
+# dormant since November 2024 and stops at Minecraft 1.21.4. This fork is
+# identical apart from pointing that submodule at xpple/cubiomes — actively
+# maintained, and supporting up to 26.2. Every symbol used is
+# signature-compatible, so nothing else changes.
+#
+# Pinned by revision deliberately: the C fork is under active refactoring, so
+# tracking its master would invite silent breakage.
+[patch.crates-io]
+cubiomes = { git = "https://github.com/LAOUUUUU/cubiomes-rs", rev = "312dfb144dcf2f7c1679e25d420545db755a4778" }
+cubiomes-sys = { git = "https://github.com/LAOUUUUU/cubiomes-rs", rev = "312dfb144dcf2f7c1679e25d420545db755a4778" }

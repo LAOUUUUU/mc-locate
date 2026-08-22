@@ -408,8 +408,7 @@ dependencies = [
 [[package]]
 name = "cubiomes"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "caa34f3518449ee8b1c11ccc10883db9d38946fe07806b372d629b8419968138"
+source = "git+https://github.com/LAOUUUUU/cubiomes-rs?rev=312dfb144dcf2f7c1679e25d420545db755a4778#312dfb144dcf2f7c1679e25d420545db755a4778"
 dependencies = [
  "bitflags 2.13.1",
  "cubiomes-sys",
@@ -419,8 +418,7 @@ dependencies = [
 [[package]]
 name = "cubiomes-sys"
 version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a117f4d8f261b69a8b228fc9edab6e2cca22392235820bcf1c8a422e679fc42"
+source = "git+https://github.com/LAOUUUUU/cubiomes-rs?rev=312dfb144dcf2f7c1679e25d420545db755a4778#312dfb144dcf2f7c1679e25d420545db755a4778"
 dependencies = [
  "bindgen 0.71.1",
  "cc",
