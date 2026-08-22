@@ -798,7 +798,10 @@ fn report(session: &mut Session, version: Version, found: Vec<i64>) -> Result<()
             println!();
             ui::note(&format!("{seed}: {passed}/{} matched", results.len()));
             for (label, ok) in results.iter().filter(|(_, ok)| !*ok) {
-                println!("    \x1b[31m✗\x1b[0m {label}");
+                println!(
+                    "    {} {label}",
+                    crate::theme::bad().apply_to(crate::theme::marks::BAD)
+                );
                 let _ = ok;
             }
         }

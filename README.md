@@ -395,6 +395,22 @@ Plus an overview of how the modes chain and a glossary.
 The mode list, the menu and the docs all read one registry, so a mode cannot be
 added without documentation: [a test enforces it](src/modes.rs).
 
+## The interface
+
+It is a terminal program, and it tries to be a good one.
+
+* **Colour is semantic**, not decorative: one style per role (heading, result,
+  warning, literal value) rather than per-call improvisation.
+* **`NO_COLOR` and pipes are respected.** All styling goes through the
+  `console` crate, so redirecting output to a file gives clean text rather than
+  a mess of escape sequences. An earlier version wrote escapes by hand and got
+  this wrong everywhere.
+* **Prose wraps to your terminal** instead of running off the right edge, and
+  boxes and rules size themselves to the window.
+* **Results are marked** — `→` for a recovered answer, `✓` / `!` / `✗` for
+  outcome — so the thing you came for is findable in a wall of explanation.
+* **The status bar** shows what the session is carrying between modes.
+
 ## Built on
 
 - **[cubiomes](https://github.com/Cubitect/cubiomes)** (Cubitect) — the C

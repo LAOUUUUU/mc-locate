@@ -21,5 +21,6 @@ pub mod slime;
 pub mod stronghold;
 pub mod structure;
 pub mod terrain;
+pub mod theme;
 pub mod ui;
 pub mod worldgen;

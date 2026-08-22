@@ -434,9 +434,15 @@ fn explain(session: &mut Session) -> Result<()> {
     println!();
     for (label, ok) in &results {
         if *ok {
-            println!("  \x1b[32m✓\x1b[0m {label}");
+            println!(
+                "  {} {label}",
+                crate::theme::good().apply_to(crate::theme::marks::GOOD)
+            );
         } else {
-            println!("  \x1b[31m✗\x1b[0m {label}");
+            println!(
+                "  {} {label}",
+                crate::theme::bad().apply_to(crate::theme::marks::BAD)
+            );
         }
     }
 

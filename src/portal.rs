@@ -110,12 +110,12 @@ pub fn run(session: &mut Session) -> Result<()> {
     println!();
     match y {
         Some(y) => {
-            ui::success(&format!("{}: {x}, {y}, {z}", from.label()));
-            ui::success(&format!("{}: {nx}, {y}, {nz}", to.label()));
+            ui::result(from.label(), &format!("{x}, {y}, {z}"));
+            ui::result(to.label(), &format!("{nx}, {y}, {nz}"));
         }
         None => {
-            ui::success(&format!("{}: {x}, {z}", from.label()));
-            ui::success(&format!("{}: {nx}, {nz}", to.label()));
+            ui::result(from.label(), &format!("{x}, {z}"));
+            ui::result(to.label(), &format!("{nx}, {nz}"));
         }
     }
 

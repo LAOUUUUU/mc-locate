@@ -106,6 +106,38 @@ pub struct Session {
 }
 
 impl Session {
+    /// Status-bar fields: short label, value.
+    ///
+    /// Structured rather than a pre-joined string so the presentation layer
+    /// decides how to render it — [`Session::summary`] stays for plain-text
+    /// contexts like the saved-file note.
+    pub fn status_fields(&self) -> Vec<(&'static str, String)> {
+        let mut out: Vec<(&'static str, String)> = Vec::new();
+        if let Some(s) = self.seed {
+            out.push(("seed", s.to_string()));
+        }
+        if let Some(v) = self.version {
+            out.push(("mc", v.label().to_string()));
+        }
+        if let Some(h) = self.heading {
+            out.push(("heading", format!("{h:.1}°")));
+        }
+        if let Some(b) = self.search_box {
+            out.push(("box", format!("{}x{}", b.width(), b.depth())));
+        }
+        if !self.candidates.is_empty() {
+            out.push(("candidates", self.candidates.len().to_string()));
+        }
+        let obs = self.slime.len() + self.bedrock.len() + self.structures.len();
+        if obs > 0 {
+            out.push(("observations", obs.to_string()));
+        }
+        if self.pillar_heights.is_some() {
+            out.push(("pillars", "recorded".to_string()));
+        }
+        out
+    }
+
     pub fn summary(&self) -> String {
         let mut parts = Vec::new();
         match self.seed {

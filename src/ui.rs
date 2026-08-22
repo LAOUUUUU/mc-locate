@@ -10,6 +10,7 @@ use std::io::{BufRead, IsTerminal};
 use std::str::FromStr;
 
 use crate::session::{BBox, Session};
+use crate::theme;
 use crate::worldgen::Version;
 
 pub fn theme() -> ColorfulTheme {
@@ -19,20 +20,58 @@ pub fn theme() -> ColorfulTheme {
 /// A titled section header, printed at the top of each mode.
 pub fn header(title: &str) {
     println!();
-    println!("\x1b[1;36m{title}\x1b[0m");
-    println!("{}", "─".repeat(title.chars().count().max(8)));
+    println!("{}", theme::boxed_header(title));
 }
 
+/// Supporting detail. Wrapped to the terminal, because a wall of text that
+/// runs off the right edge is worse than no explanation.
 pub fn note(msg: &str) {
-    println!("  \x1b[2m{msg}\x1b[0m");
+    print!("{}", theme::dim().apply_to(theme::wrap(msg, 2)));
 }
 
 pub fn warn(msg: &str) {
-    println!("  \x1b[1;33m! {msg}\x1b[0m");
+    let body = theme::wrap(msg, 4);
+    print!(
+        "{}",
+        theme::warn_style().apply_to(format!("  {} {}", theme::marks::WARN, body.trim_start()))
+    );
 }
 
 pub fn success(msg: &str) {
-    println!("  \x1b[1;32m✓ {msg}\x1b[0m");
+    let body = theme::wrap(msg, 4);
+    print!(
+        "{}",
+        theme::good().apply_to(format!("  {} {}", theme::marks::GOOD, body.trim_start()))
+    );
+}
+
+/// A failure, for results rather than errors returned up the stack.
+pub fn failure(msg: &str) {
+    let body = theme::wrap(msg, 4);
+    print!(
+        "{}",
+        theme::bad().apply_to(format!("  {} {}", theme::marks::BAD, body.trim_start()))
+    );
+}
+
+/// A recovered answer — the thing the user came for.
+pub fn result(label: &str, value: &str) {
+    println!(
+        "  {} {} {}",
+        theme::good().apply_to(theme::marks::ARROW),
+        theme::dim().apply_to(format!("{label}:")),
+        theme::value().apply_to(value)
+    );
+}
+
+/// An aligned table of results.
+pub fn table(headers: &[&str], rows: &[Vec<String>]) {
+    print!("{}", theme::table(headers, rows));
+}
+
+/// A horizontal rule.
+pub fn rule() {
+    println!("{}", theme::rule());
 }
 
 pub fn select(prompt: &str, items: &[String]) -> Result<usize> {
@@ -199,11 +238,11 @@ pub fn prompt_bbox(session: &mut Session, purpose: &str) -> Result<BBox> {
 pub fn progress_bar(total: u64, label: &str) -> ProgressBar {
     let pb = ProgressBar::new(total);
     pb.set_style(
-        ProgressStyle::with_template(
-            "  {msg} [{bar:34.cyan/blue}] {human_pos}/{human_len} ({percent}%) {per_sec} eta {eta}",
-        )
-        .unwrap_or_else(|_| ProgressStyle::default_bar())
-        .progress_chars("=>-"),
+        ProgressStyle::with_template(theme::bar_template())
+            .unwrap_or_else(|_| ProgressStyle::default_bar())
+            // Block characters rather than ASCII: they render a smooth bar and
+            // suit the subject.
+            .progress_chars("█▉▊▋▌▍▎▏ "),
     );
     pb.set_message(label.to_string());
     pb
@@ -213,8 +252,9 @@ pub fn progress_bar(total: u64, label: &str) -> ProgressBar {
 pub fn spinner(label: &str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
     pb.set_style(
-        ProgressStyle::with_template("  {spinner:.cyan} {msg} ({elapsed})")
-            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        ProgressStyle::with_template(theme::spinner_template())
+            .unwrap_or_else(|_| ProgressStyle::default_spinner())
+            .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
     );
     pb.set_message(label.to_string());
     pb.enable_steady_tick(std::time::Duration::from_millis(100));

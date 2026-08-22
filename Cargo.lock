@@ -984,11 +984,12 @@ dependencies = [
 
 [[package]]
 name = "mc-locate"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ab_glyph",
  "anyhow",
  "chrono",
+ "console",
  "csv",
  "cubiomes",
  "cubiomes-sys",

@@ -32,17 +32,25 @@ pub fn render(page: &str) -> String {
             continue;
         }
         if in_code {
-            out.push_str(&format!("    \x1b[2m{line}\x1b[0m\n"));
+            out.push_str(&format!("    {}\n", crate::theme::dim().apply_to(line)));
             continue;
         }
         if let Some(h) = line.strip_prefix("# ") {
-            out.push_str(&format!("\n\x1b[1;36m{h}\x1b[0m\n{}\n", "─".repeat(h.chars().count())));
+            out.push_str(&format!(
+                "\n{}\n{}\n",
+                crate::theme::title().apply_to(h),
+                crate::theme::dim().apply_to("─".repeat(h.chars().count()))
+            ));
         } else if let Some(h) = line.strip_prefix("## ") {
-            out.push_str(&format!("\n\x1b[1m{h}\x1b[0m\n"));
+            out.push_str(&format!("\n{}\n", crate::theme::value().apply_to(h)));
         } else if let Some(item) = line.strip_prefix("* ") {
-            out.push_str(&format!("  • {}\n", emphasis(item)));
+            out.push_str(&format!(
+                "  {} {}\n",
+                crate::theme::literal().apply_to("•"),
+                emphasis(item)
+            ));
         } else if line.starts_with("    ") {
-            out.push_str(&format!("\x1b[2m{line}\x1b[0m\n"));
+            out.push_str(&format!("{}\n", crate::theme::dim().apply_to(line)));
         } else {
             out.push_str(&format!("{}\n", emphasis(line)));
         }
@@ -74,12 +82,17 @@ fn emphasis(line: &str) -> String {
         };
 
         // Attribute-specific "off" codes rather than a blanket reset, so a
-        // code span inside bold does not cancel the bold when it ends.
+        // code span inside bold does not cancel the bold when it ends. This is
+        // the one place that writes escapes by hand — `console::Style` has no
+        // way to say "turn off bold only" — so it also has to honour
+        // `NO_COLOR` itself, which every other styled path gets for free.
+        let colour = console::colors_enabled();
         let (skip, close, on, off) = match kind {
             Marker::Bold => (2, "**", "\x1b[1m", "\x1b[22m"),
             Marker::Italic => (1, "*", "\x1b[3m", "\x1b[23m"),
             Marker::Code => (1, "`", "\x1b[36m", "\x1b[39m"),
         };
+        let (on, off) = if colour { (on, off) } else { ("", "") };
 
         let after = &rest[at + skip..];
         let end = match kind {
@@ -164,6 +177,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rendering_emits_no_escapes_when_colours_are_off() {
+        let _guard = crate::theme::colour_lock();
+        // Piping the docs to a file must produce readable text, not a mess of
+        // control codes. `emphasis` writes escapes by hand, so this is the
+        // only guard that it respects NO_COLOR.
+        let before = console::colors_enabled();
+        console::set_colors_enabled(false);
+        let out = render("# Title\n\n**bold** and `code` and *soft*.\n");
+        console::set_colors_enabled(before);
+
+        assert!(!out.contains('\x1b'), "escapes leaked: {out:?}");
+        assert!(out.contains("bold") && out.contains("code") && out.contains("soft"));
+        assert!(out.contains("Title"));
+    }
+
+    #[test]
     fn the_standalone_pages_are_substantial() {
         assert!(OVERVIEW.trim().starts_with("# "));
         assert!(GLOSSARY.trim().starts_with("# "));
@@ -192,6 +221,7 @@ mod tests {
 
     #[test]
     fn rendering_strips_markdown_and_survives_odd_input() {
+        let _guard = crate::theme::colour_lock();
         let r = render("# Title\n\nSome **bold** and `code` here.\n* a bullet\n");
         assert!(r.contains("Title"));
         assert!(!r.contains("**"), "bold markers should be consumed: {r:?}");
@@ -206,6 +236,7 @@ mod tests {
 
     #[test]
     fn italics_render_and_formula_asterisks_are_left_alone() {
+        let _guard = crate::theme::colour_lock();
         let r = render("this *word* is emphasised");
         assert!(!r.contains('*'), "italic markers should be consumed: {r:?}");
         assert!(r.contains("word"));
@@ -245,6 +276,19 @@ mod tests {
 
     #[test]
     fn no_page_leaves_unrendered_markdown_on_screen() {
+        // Forced on: the check distinguishes real content from styled code
+        // spans by their escapes, so it needs the coloured form.
+        let _guard = crate::theme::colour_lock();
+        let before = console::colors_enabled();
+        console::set_colors_enabled(true);
+        let result = std::panic::catch_unwind(check_pages);
+        console::set_colors_enabled(before);
+        if let Err(e) = result {
+            std::panic::resume_unwind(e);
+        }
+    }
+
+    fn check_pages() {
         // Catches an unpaired marker anywhere in the hand-written pages —
         // notably bold spanning a line break, which a line-by-line renderer
         // cannot close and which this found in mode 3's page.
@@ -272,6 +316,7 @@ mod tests {
 
     #[test]
     fn code_fences_are_not_printed_as_backticks() {
+        let _guard = crate::theme::colour_lock();
         let r = render("before\n```\nlet x = 1;\n```\nafter");
         assert!(!r.contains("```"));
         assert!(r.contains("let x = 1;"));
@@ -280,6 +325,7 @@ mod tests {
 
     #[test]
     fn every_page_renders_without_panicking() {
+        let _guard = crate::theme::colour_lock();
         // The pages are hand-written markdown; rendering must never be the
         // thing that breaks.
         for m in MODES {

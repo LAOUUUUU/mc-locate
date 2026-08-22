@@ -9,13 +9,16 @@
 use anyhow::Result;
 use mc_locate::modes::{MODES, menu_label};
 use mc_locate::session::Session;
-use mc_locate::ui;
+use mc_locate::{theme, ui};
 
 fn banner() {
     println!();
-    println!("\x1b[1;36m  mc-locate\x1b[0m \x1b[2mv{}\x1b[0m", env!("CARGO_PKG_VERSION"));
-    println!("  \x1b[2mSeed and coordinate recovery for Minecraft Java Edition\x1b[0m");
-    println!("  \x1b[2mNew here? Mode 14 explains every mode; mode 11 needs nothing to try.\x1b[0m");
+    print!("{}", theme::banner(env!("CARGO_PKG_VERSION")));
+    println!(
+        "  {}",
+        theme::dim()
+            .apply_to("New here? Mode 14 explains every mode; mode 11 needs nothing to try.")
+    );
 }
 
 fn main() -> Result<()> {
@@ -33,9 +36,10 @@ fn main() -> Result<()> {
 
     loop {
         println!();
-        let summary = session.summary();
-        if !summary.is_empty() {
-            println!("  \x1b[2mSession: {summary}\x1b[0m");
+        let bar = theme::status_bar(&session.status_fields());
+        if !bar.is_empty() {
+            println!("{bar}");
+            println!("{}", theme::rule());
         }
 
         let mut items: Vec<String> = (0..MODES.len()).map(menu_label).collect();
@@ -51,7 +55,7 @@ fn main() -> Result<()> {
         };
 
         if choice >= MODES.len() {
-            println!("\n  Bye.");
+            println!("\n  {}", theme::dim().apply_to("Bye."));
             return Ok(());
         }
 
