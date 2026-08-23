@@ -180,7 +180,11 @@ fn a_priori_bits(p: f64) -> f64 {
 }
 
 /// The ranking used when there is no candidate list to partition.
-pub fn a_priori_proposals(version: Version) -> Vec<Proposal> {
+///
+/// `version` is optional: structure proposals need the generator's per-version
+/// salts, but pillars, bedrock and slime chunks do not, so a version past the
+/// generator's ceiling simply gets a shorter list rather than no advice.
+pub fn a_priori_proposals(version: Option<Version>) -> Vec<Proposal> {
     let mut out = vec![
         Proposal {
             what: "End pillar heights (all ten, from the central End island)".to_string(),
@@ -230,6 +234,7 @@ pub fn a_priori_proposals(version: Version) -> Vec<Proposal> {
     // Structures are worth two nextInt draws each, so their value depends on
     // the per-version chunk range rather than being a fixed number.
     for (stype, name, _) in STRUCTURES.iter().take(12) {
+        let Some(version) = version else { break };
         if let Some(cfg) = structure_config(version, *stype)
             && cfg.chunk_range > 1
         {
@@ -294,7 +299,9 @@ pub fn run(session: &mut Session) -> Result<()> {
 }
 
 fn advise(session: &mut Session) -> Result<()> {
-    let version = ui::prompt_version(session)?;
+    // Splitting a candidate list needs no generator at all, and the a-priori
+    // ranking simply drops its structure entries without one.
+    let version = ui::prompt_version_any(session)?.generated();
 
     if session.candidates.is_empty() {
         ui::note("No candidate seeds yet, so the whole 2^48 space is still in play.");
@@ -408,7 +415,7 @@ fn advise(session: &mut Session) -> Result<()> {
 }
 
 fn explain(session: &mut Session) -> Result<()> {
-    let version = ui::prompt_version(session)?;
+    let version = ui::prompt_version_any(session)?.generated();
     let tolerance: i32 = ui::input_default("Structure position tolerance (blocks)", 16)?;
     let constraints = ConstraintSet::build(session, version, tolerance)?;
 
@@ -532,7 +539,7 @@ mod tests {
 
     #[test]
     fn a_priori_ranking_puts_pillars_first_and_negatives_last() {
-        let props = a_priori_proposals(Version::V1_21_1);
+        let props = a_priori_proposals(Some(Version::V1_21_1));
         assert!(props[0].what.contains("End pillar"), "pillars should rank first");
         assert!((props[0].bits - 16.0).abs() < 1e-9);
 
@@ -550,7 +557,7 @@ mod tests {
 
     #[test]
     fn far_apart_structures_are_not_advertised_as_a_short_trip() {
-        let props = a_priori_proposals(Version::V1_21_1);
+        let props = a_priori_proposals(Some(Version::V1_21_1));
         let mansion = props
             .iter()
             .find(|p| p.what.contains("woodland mansion"))
@@ -578,7 +585,7 @@ mod tests {
         assert_eq!(article("Village"), "a");
         assert_eq!(article("Desert pyramid"), "a");
 
-        let props = a_priori_proposals(Version::V1_21_1);
+        let props = a_priori_proposals(Some(Version::V1_21_1));
         for p in &props {
             assert!(!p.what.contains("a ocean"), "article agreement: {}", p.what);
             assert!(!p.what.contains("a igloo"), "article agreement: {}", p.what);
@@ -586,6 +593,32 @@ mod tests {
                 assert!(!n.contains("1 low bits"), "pluralisation: {n}");
             }
         }
+    }
+
+    #[test]
+    fn advice_degrades_rather_than_disappears_without_a_version() {
+        // On a version past the generator's ceiling the structure suggestions
+        // are unavailable, but the ones that need no generator must survive —
+        // otherwise the mode has nothing to say to a modern-version player.
+        let with = a_priori_proposals(Some(Version::V1_21_1));
+        let without = a_priori_proposals(None);
+
+        assert!(without.len() < with.len(), "structure proposals should drop out");
+        assert!(!without.is_empty(), "the generator-free advice must remain");
+
+        for p in &without {
+            assert!(
+                !p.what.contains("origin chunk"),
+                "structure advice leaked through: {}",
+                p.what
+            );
+        }
+        // The three that never consult cubiomes are all still offered.
+        let text: String = without.iter().map(|p| p.what.clone()).collect();
+        assert!(text.contains("End pillar"));
+        assert!(text.contains("bedrock"));
+        assert!(text.contains("slime"));
+        assert!(without[0].what.contains("End pillar"), "pillars still rank first");
     }
 
     #[test]
@@ -610,7 +643,7 @@ mod tests {
             is_slime: !slime::is_slime_chunk(secret, 99, 99),
         });
 
-        let cs = ConstraintSet::build(&session, version, 16).unwrap();
+        let cs = ConstraintSet::build(&session, Some(version), 16).unwrap();
         let results = cs.explain(secret);
         assert_eq!(results.len(), 6, "every constraint should be reported, not just the first failure");
 

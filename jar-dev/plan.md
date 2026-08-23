@@ -1,6 +1,11 @@
 # mc-locate — development plan
 
-Working notes for two pieces of work that are not yet started:
+> **Status: Part 1 complete as of v0.5.0.** Tiers 1–4 all landed. What actually
+> happened is recorded at the end under "Outcome"; the tier write-ups below are
+> kept as they were written, because the reasoning still explains *why* the work
+> was shaped this way. Part 2 (the Fabric mod) is still not started.
+
+Working notes for two pieces of work:
 
 1. **Version support** — getting from 14 supported Minecraft versions to 34,
    including current Minecraft.
@@ -272,3 +277,75 @@ Checked 2026-08-22, so it does not need re-deriving:
   release. **Irrelevant to worldgen** — rendering is presentation; every
   formula here runs before a pixel is drawn. Only modes 3 (F3 OCR) and 5
   (camera pose) touch pixels and might need retuning.
+
+---
+
+# Outcome — Part 1, delivered in v0.5.0
+
+**Beta 1.7 → 26.2, 34 versions**, up from 14. All four tiers landed. Three
+things went differently from the plan and are worth recording.
+
+## Tier 2 was done by forking the wrapper, not vendoring the C
+
+The plan called for vendoring xpple's C and hand-writing a `-sys` layer.
+`cubiomes-rs` turned out to be a clean workspace with the C as a *submodule*,
+so forking it and repointing that submodule was a two-line change instead of
+roughly 500 lines of new binding code — same result, far less to get wrong, and
+upstreamable. The fork is `LAOUUUUU/cubiomes-rs`; its only changes are the
+submodule URL and three extra `.c` files in the build list
+(`carver.c`, `terrainnoise.c`, `xradv.c`).
+
+mc-locate points at it with `[patch.crates-io]` pinned by revision.
+`Cargo.lock` records the exact commit, and `--locked` builds work.
+
+**The evidence the swap was safe:** all 269 pre-existing tests passed against
+the new backend *before* any versions were added, including the 108-vector
+slime oracle and the structure cross-checks across four versions.
+
+## Tier 1 hid two real bugs
+
+Exposing the old versions naively would have shipped both:
+
+* **Pre-1.9 worlds have three strongholds, not 128.** cubiomes returns
+  `(mc >= MC_1_9 ? 128 : 3)`; the iterator capped at a hardcoded 128 and mode
+  10's ring prior assumes an 8-ring layout that did not exist yet.
+* **Beta *panics* on the height map** — the wrapper literally calls `panic!`,
+  so picking Beta 1.8 in mode 2 would have crashed the program.
+
+Both are now guarded, with tests. Version boundary checks were also rewritten
+as `at_least(MCVersion)` comparisons, since cubiomes declares its enum in
+release order — one less hand-maintained list.
+
+## The 26.2 regression test initially failed, and the test was wrong
+
+It asserted 26.2 generates differently from 1.21.4, sampling at y=63, and
+failed. The instinct was "the patch is not applying". The C says otherwise:
+26.2's addition is `sulfur_caves`, id 187 — a **cave** biome. At y=10 the
+difference is obvious (13 hits, and 1.21.4 never produces it). The surface is
+genuinely unchanged.
+
+A separate false alarm: the bindings appeared to lack `MC_26_2` because the
+grep hit a stale build directory from before the patch.
+
+## Tier 3 needed a second pass
+
+The first pass added `ChosenVersion` and taught mode 1 to accept a version past
+the ceiling, but modes 9 and 12 still called `prompt_version` and so refused
+outright — locking a modern-version player out of the End-pillar route, slime
+and bedrock constraints, and all of the advisor, none of which touch the
+generator. `ConstraintSet::build` now takes `Option<Version>`, drops structure
+constraints with a count rather than silently, and both modes degrade instead
+of refusing.
+
+## Tier 4 arrived by accident
+
+A Tier 3 test asserting the ceiling was 1.21.4 failed when Tier 2 moved it —
+exactly the drift guard Tier 4 called for. It is now a regression check: if a
+dependency change silently reverts to the dormant upstream, every modern-world
+answer would be wrong with no other symptom, and this fails loudly instead.
+
+## Known risk carried forward
+
+The build now depends on a **git dependency with a submodule**, so CI needs
+network at build time. `--locked` works locally and the lockfile pins the
+revision, but the first CI run on `main` is the real test.
