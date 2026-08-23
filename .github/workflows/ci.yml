@@ -39,7 +39,13 @@ jobs:
           # and errors out. clang-cl accepts them while still targeting the
           # MSVC ABI, so the resulting binary is an ordinary MSVC-linked exe.
           "CC_x86_64_pc_windows_msvc=clang-cl" >> $env:GITHUB_ENV
-          "CFLAGS_x86_64_pc_windows_msvc=-Wno-vla-extension" >> $env:GITHUB_ENV
+          # -ffunction-sections puts each function in its own COMDAT so the
+          # linker's /OPT:REF can discard the unreferenced ones. That matters
+          # because the fork calls getEndCityPieces and getStrongholdLoot
+          # without ever defining them — macOS and Linux dead-strip the callers
+          # before resolving, MSVC's linker does not.
+          "CFLAGS_x86_64_pc_windows_msvc=-Wno-vla-extension -ffunction-sections" >> $env:GITHUB_ENV
+          "RUSTFLAGS=-C link-arg=/OPT:REF" >> $env:GITHUB_ENV
 
       - name: Cache cargo
         uses: actions/cache@v4
