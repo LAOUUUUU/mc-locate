@@ -4,13 +4,14 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Locale;
 
+import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -51,44 +52,44 @@ public class ExporterClient implements ClientModInitializer {
 		new AutoCollector(session, config).register();
 
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registry) -> {
-			LiteralArgumentBuilder<FabricClientCommandSource> root = ClientCommands.literal("mclocate");
+			LiteralArgumentBuilder<FabricClientCommandSource> root = literal("mclocate");
 
-			root.then(ClientCommands.literal("bedrock")
+			root.then(literal("bedrock")
 					.executes(ctx -> scanBedrock(ctx.getSource(), DEFAULT_RADIUS))
-					.then(ClientCommands.argument("radius", IntegerArgumentType.integer(1, MAX_RADIUS))
+					.then(argument("radius", IntegerArgumentType.integer(1, MAX_RADIUS))
 							.executes(ctx -> scanBedrock(ctx.getSource(),
 									IntegerArgumentType.getInteger(ctx, "radius")))));
 
-			root.then(ClientCommands.literal("pillars")
+			root.then(literal("pillars")
 					.executes(ctx -> scanPillars(ctx.getSource())));
 
-			root.then(ClientCommands.literal("auto")
-					.then(ClientCommands.literal("on").executes(ctx -> setAuto(ctx.getSource(), true)))
-					.then(ClientCommands.literal("off").executes(ctx -> setAuto(ctx.getSource(), false)))
+			root.then(literal("auto")
+					.then(literal("on").executes(ctx -> setAuto(ctx.getSource(), true)))
+					.then(literal("off").executes(ctx -> setAuto(ctx.getSource(), false)))
 					.executes(ctx -> {
 						feedback(ctx.getSource(), "Passive collection is "
 								+ (config.autoBedrock ? "§aon" : "§coff") + "§r. Use §e/mclocate auto on§r.");
 						return 1;
 					}));
 
-			root.then(ClientCommands.literal("status")
+			root.then(literal("status")
 					.executes(ctx -> status(ctx.getSource())));
 
-			root.then(ClientCommands.literal("export")
+			root.then(literal("export")
 					.executes(ctx -> export(ctx.getSource())));
 
-			root.then(ClientCommands.literal("clear")
+			root.then(literal("clear")
 					.executes(ctx -> {
 						session.clear();
 						feedback(ctx.getSource(), "Session cleared.");
 						return 1;
 					}));
 
-			root.then(ClientCommands.literal("here")
+			root.then(literal("here")
 					.executes(ctx -> here(ctx.getSource())));
 
-			root.then(ClientCommands.literal("mark")
-					.then(ClientCommands.argument("type", StringArgumentType.word())
+			root.then(literal("mark")
+					.then(argument("type", StringArgumentType.word())
 							.executes(ctx -> mark(ctx.getSource(),
 									StringArgumentType.getString(ctx, "type")))));
 
@@ -203,7 +204,7 @@ public class ExporterClient implements ClientModInitializer {
 		}
 		feedback(source, String.format(Locale.ROOT, "§bhere§r %.1f %.1f %.1f  yaw %.2f  in %s",
 				client.player.getX(), client.player.getY(), client.player.getZ(),
-				client.player.getYRot(), client.level.dimension().identifier()));
+				client.player.getYRot(), dimensionName(client.level)));
 		return 1;
 	}
 
@@ -253,6 +254,36 @@ public class ExporterClient implements ClientModInitializer {
 			LOGGER.error("export failed", e);
 			return 0;
 		}
+	}
+
+	// The Fabric convenience class for these was renamed ClientCommandManager ->
+	// ClientCommands between 1.21 and 26.x. Brigadier's own builder statics are
+	// what both versions wrap, so calling them directly is version-proof.
+	private static LiteralArgumentBuilder<FabricClientCommandSource> literal(String name) {
+		return LiteralArgumentBuilder.literal(name);
+	}
+
+	private static <T> RequiredArgumentBuilder<FabricClientCommandSource, T> argument(
+			String name, ArgumentType<T> type) {
+		return RequiredArgumentBuilder.argument(name, type);
+	}
+
+	/**
+	 * A short dimension label, derived by comparing the level's key to the three
+	 * known ones. This sidesteps the Identifier/Identifier accessor rename
+	 * between 1.21 and 26.x entirely.
+	 */
+	private static String dimensionName(Level level) {
+		if (Level.NETHER.equals(level.dimension())) {
+			return "the_nether";
+		}
+		if (Level.END.equals(level.dimension())) {
+			return "the_end";
+		}
+		if (Level.OVERWORLD.equals(level.dimension())) {
+			return "overworld";
+		}
+		return "other";
 	}
 
 	private static void feedback(FabricClientCommandSource source, String message) {

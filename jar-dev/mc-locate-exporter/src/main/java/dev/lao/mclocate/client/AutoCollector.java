@@ -4,11 +4,11 @@ import java.util.List;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLevelEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.projectile.EyeOfEnder;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -37,6 +37,13 @@ public final class AutoCollector {
 	private int pillarRetriesLeft;
 	private boolean pillarsDone;
 
+	/**
+	 * The dimension seen last tick. AFTER_CLIENT_LEVEL_CHANGE would be tidier,
+	 * but that event does not exist in 1.21.x's Fabric API, so the change is
+	 * detected by watching this instead — which needs no event at all.
+	 */
+	private ResourceKey<Level> lastDimension;
+
 	/** Announce progress at most this often, in ticks, to avoid chat spam. */
 	private static final int ANNOUNCE_INTERVAL = 200;
 	private int sinceAnnounce;
@@ -54,7 +61,6 @@ public final class AutoCollector {
 				eyes.watch(eye);
 			}
 		});
-		ClientLevelEvents.AFTER_CLIENT_LEVEL_CHANGE.register((client, level) -> onLevelChange(level));
 		ClientTickEvents.END_CLIENT_TICK.register(client -> onTick(client));
 	}
 
@@ -75,8 +81,8 @@ public final class AutoCollector {
 		if (!config.autoBedrock || level == null || !Level.NETHER.equals(level.dimension())) {
 			return;
 		}
-		int originX = chunk.getPos().x() << 4;
-		int originZ = chunk.getPos().z() << 4;
+		int originX = chunk.getPos().getMinBlockX();
+		int originZ = chunk.getPos().getMinBlockZ();
 		int added = sampleLayer(level, originX, originZ, Collector.FLOOR_Y)
 				+ sampleLayer(level, originX, originZ, Collector.ROOF_Y);
 		collectedSinceAnnounce += added;
@@ -120,6 +126,11 @@ public final class AutoCollector {
 	private void onTick(Minecraft client) {
 		if (client.level == null) {
 			return;
+		}
+		ResourceKey<Level> dim = client.level.dimension();
+		if (!dim.equals(lastDimension)) {
+			lastDimension = dim;
+			onLevelChange(client.level);
 		}
 		if (config.autoEyes) {
 			List<EyeTracker.Throw> readings = eyes.tick();
@@ -184,6 +195,11 @@ public final class AutoCollector {
 
 	private static void say(Minecraft client, String message) {
 		if (client.player != null) {
+			// sendSystemMessage exists on 26.x and 1.21.1 but not 1.21.11;
+			// displayClientMessage exists on all 1.21.x but not 26.x. Split at 26.1.
+			//? if <26.1 {
+			/*client.player.displayClientMessage(Component.literal(message), false);
+			*///?} else
 			client.player.sendSystemMessage(Component.literal(message));
 		}
 	}
