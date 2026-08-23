@@ -9,6 +9,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # A newer runner is needed because macos-14's clang rejects the loot tables'
+  # static initialisers as non-constant. Pin the deployment target so the newer
+  # SDK does not quietly raise the minimum macOS the binaries will run on.
+  MACOSX_DEPLOYMENT_TARGET: "13.0"
 
 jobs:
   build:
@@ -24,7 +28,7 @@ jobs:
           # cross-compiles to x86_64 from Apple Silicon without extra setup, so
           # `lipo` can fuse both slices into a single download that works on
           # every Mac.
-          - os: macos-14
+          - os: macos-15
             target: universal-apple-darwin
             label: macos-universal
           # 22.04 rather than latest: binaries link against its older glibc,
@@ -50,6 +54,18 @@ jobs:
             choco install llvm -y --no-progress
           }
           "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+          # The cubiomes C uses variable-length arrays and variably-modified
+          # pointer types — standard C99, but MSVC has never implemented them
+          # and errors out. clang-cl accepts them while still targeting the
+          # MSVC ABI, so the resulting binary is an ordinary MSVC-linked exe.
+          "CC_x86_64_pc_windows_msvc=clang-cl" >> $env:GITHUB_ENV
+          # -ffunction-sections puts each function in its own COMDAT so the
+          # linker's /OPT:REF can discard the unreferenced ones. That matters
+          # because the fork calls getEndCityPieces and getStrongholdLoot
+          # without ever defining them — macOS and Linux dead-strip the callers
+          # before resolving, MSVC's linker does not.
+          "CFLAGS_x86_64_pc_windows_msvc=-Wno-vla-extension -ffunction-sections" >> $env:GITHUB_ENV
+          "RUSTFLAGS=-C link-arg=/OPT:REF" >> $env:GITHUB_ENV
 
       - name: Add target
         if: matrix.target != 'universal-apple-darwin'

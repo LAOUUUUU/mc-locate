@@ -58,5 +58,5 @@ codegen-units = 1
 # Pinned by revision deliberately: the C fork is under active refactoring, so
 # tracking its master would invite silent breakage.
 [patch.crates-io]
-cubiomes = { git = "https://github.com/LAOUUUUU/cubiomes-rs", rev = "312dfb144dcf2f7c1679e25d420545db755a4778" }
-cubiomes-sys = { git = "https://github.com/LAOUUUUU/cubiomes-rs", rev = "312dfb144dcf2f7c1679e25d420545db755a4778" }
+cubiomes = { git = "https://github.com/LAOUUUUU/cubiomes-rs", rev = "026c05fc4de201b1cec2ae89940c59f6fb3bd862" }
+cubiomes-sys = { git = "https://github.com/LAOUUUUU/cubiomes-rs", rev = "026c05fc4de201b1cec2ae89940c59f6fb3bd862" }
