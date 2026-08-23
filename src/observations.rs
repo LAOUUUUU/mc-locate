@@ -82,10 +82,28 @@ pub struct ObservationFile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub structures: Vec<StructureDto>,
 
+    /// Eye-of-ender bearings for stronghold triangulation.
+    ///
+    /// A bearing taken from the eye entity itself is far better than one read
+    /// off the F3 screen: the eye flies exactly at the stronghold, while the
+    /// player's yaw is only roughly where they were looking and is quantised
+    /// by mouse resolution. The exporter mod produces these.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub eye_throws: Vec<EyeThrowDto>,
+
     /// Free-form note about where the file came from — useful when a mod, a
     /// script and a person are all writing these.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+}
+
+/// One eye-of-ender bearing: where it was thrown from, and the yaw it flew.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct EyeThrowDto {
+    pub x: f64,
+    pub z: f64,
+    /// Minecraft yaw in degrees; 0 faces +Z, 90 faces -X.
+    pub yaw: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -173,6 +191,11 @@ impl ObservationFile {
                     z: o.z,
                     is_bedrock: o.is_bedrock,
                 })
+                .collect(),
+            eye_throws: session
+                .eye_throws
+                .iter()
+                .map(|t| EyeThrowDto { x: t.x, z: t.z, yaw: t.yaw })
                 .collect(),
             structures: session
                 .structures
@@ -277,6 +300,28 @@ impl ObservationFile {
             }
         }
 
+        for o in &self.eye_throws {
+            if !o.x.is_finite() || !o.z.is_finite() || !o.yaw.is_finite() {
+                summary
+                    .warnings
+                    .push("skipped an eye throw with a non-finite value".to_string());
+                continue;
+            }
+            let t = crate::stronghold::Throw { x: o.x, z: o.z, yaw: o.yaw };
+            // Exact-equality dedup is right here: these come from a file, not
+            // from arithmetic, so a repeat is a byte-identical repeat.
+            if session
+                .eye_throws
+                .iter()
+                .any(|e| e.x == t.x && e.z == t.z && e.yaw == t.yaw)
+            {
+                summary.duplicates += 1;
+            } else {
+                session.eye_throws.push(t);
+                summary.eye_throws += 1;
+            }
+        }
+
         for o in &self.structures {
             match parse_structure(&o.structure) {
                 Ok(stype) => {
@@ -356,7 +401,7 @@ impl ObservationFile {
     /// whether there is anything worth saving — a session can hold a search
     /// box or a heading and no observations at all.
     pub fn count(&self) -> usize {
-        self.slime.len() + self.bedrock.len() + self.structures.len()
+        self.slime.len() + self.bedrock.len() + self.structures.len() + self.eye_throws.len()
     }
 
     /// True when this file would carry nothing at all.
@@ -382,6 +427,7 @@ pub struct ImportSummary {
     pub slime: usize,
     pub bedrock: usize,
     pub structures: usize,
+    pub eye_throws: usize,
     pub candidates: usize,
     pub pillars: bool,
     pub duplicates: usize,
@@ -390,7 +436,7 @@ pub struct ImportSummary {
 
 impl ImportSummary {
     pub fn total(&self) -> usize {
-        self.slime + self.bedrock + self.structures
+        self.slime + self.bedrock + self.structures + self.eye_throws
     }
 }
 
@@ -405,6 +451,9 @@ impl std::fmt::Display for ImportSummary {
         }
         if self.structures > 0 {
             parts.push(format!("{} structure", self.structures));
+        }
+        if self.eye_throws > 0 {
+            parts.push(format!("{} eye throw", self.eye_throws));
         }
         if self.candidates > 0 {
             parts.push(format!("{} candidate seed", self.candidates));
@@ -448,6 +497,7 @@ mod tests {
             pillar_heights: Some([
                 Some(76), None, Some(82), None, None, Some(94), None, None, None, Some(103),
             ]),
+            eye_throws: vec![crate::stronghold::Throw { x: 8.0, z: -16.0, yaw: 33.25 }],
             newer_version: None,
         }
     }
@@ -528,15 +578,16 @@ mod tests {
         let file = ObservationFile::from_session(&sample_session(), None);
         let mut s = Session::default();
         let first = file.apply_to_session(&mut s, false).unwrap();
-        assert_eq!(first.total(), 4);
+        assert_eq!(first.total(), 5);
         assert_eq!(first.duplicates, 0);
 
         let second = file.apply_to_session(&mut s, false).unwrap();
         assert_eq!(second.total(), 0, "nothing new the second time");
-        assert_eq!(second.duplicates, 4);
+        assert_eq!(second.duplicates, 5);
         assert_eq!(s.slime.len(), 2);
         assert_eq!(s.bedrock.len(), 1);
         assert_eq!(s.structures.len(), 1);
+        assert_eq!(s.eye_throws.len(), 1);
         assert_eq!(s.candidates.len(), 3);
     }
 
@@ -669,7 +720,7 @@ mod tests {
             .save(&path)
             .unwrap();
         let back = ObservationFile::load(&path).unwrap();
-        assert_eq!(back.count(), 4);
+        assert_eq!(back.count(), 5);
         assert_eq!(back.source.as_deref(), Some("unit test"));
 
         // Empty collections are omitted, so the file stays readable by hand.
@@ -677,5 +728,84 @@ mod tests {
         assert!(text.contains("\"format\""));
         assert!(!text.contains("\"warnings\""));
         let _ = std::fs::remove_file(&path);
+    }
+}
+
+#[cfg(test)]
+mod eye_throw_tests {
+    use super::*;
+
+    /// The mod computes yaw as `toDegrees(atan2(-dx, dz))`. This pins the same
+    /// convention on the Rust side, so a sign flip in either place fails here
+    /// rather than silently aiming the triangulation at a mirrored bearing.
+    #[test]
+    fn java_yaw_convention_matches_bearing_to() {
+        let cases: [(f64, f64, f64); 4] = [
+            // (dx, dz, expected yaw)
+            (0.0, 1.0, 0.0),     // +Z is south, yaw 0
+            (-1.0, 0.0, 90.0),   // -X is west, yaw 90
+            (0.0, -1.0, 180.0),  // -Z is north
+            (1.0, 0.0, -90.0),   // +X is east
+        ];
+        for (dx, dz, want) in cases {
+            // atan2 returns -180 for due north where the fold in the mod's
+            // yawOf returns +180; they are the same bearing, so compare with
+            // angle_difference rather than raw subtraction.
+            let java_side = (-dx).atan2(dz).to_degrees();
+            assert!(
+                crate::stronghold::angle_difference(java_side, want).abs() < 1e-9,
+                "dx={dx} dz={dz}: java yaw {java_side} != {want}"
+            );
+            // And the same bearing derived from two points must agree.
+            let rust_side = crate::stronghold::bearing_to(0.0, 0.0, dx * 100.0, dz * 100.0);
+            assert!(
+                crate::stronghold::angle_difference(rust_side, want).abs() < 1e-9,
+                "bearing_to disagrees: {rust_side} vs {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn eye_throws_round_trip_and_dedup() {
+        let json = r#"{
+            "format": "mc-locate-observations", "version": 1,
+            "eye_throws": [
+                {"x": 12.5, "z": -40.25, "yaw": 41.7},
+                {"x": 12.5, "z": -40.25, "yaw": 41.7},
+                {"x": 900.0, "z": 100.0, "yaw": -12.0}
+            ]
+        }"#;
+        let file: ObservationFile = serde_json::from_str(json).unwrap();
+        assert_eq!(file.eye_throws.len(), 3);
+
+        let mut session = Session::default();
+        let summary = file.apply_to_session(&mut session, false).unwrap();
+        assert_eq!(summary.eye_throws, 2, "the exact repeat should be a duplicate");
+        assert_eq!(summary.duplicates, 1);
+        assert_eq!(session.eye_throws.len(), 2);
+        assert!((session.eye_throws[0].yaw - 41.7).abs() < 1e-12);
+    }
+
+    #[test]
+    fn non_finite_throws_cannot_enter_through_json() {
+        // JSON has no infinity literal, and serde_json rejects an
+        // out-of-range magnitude rather than rounding it to inf. So the
+        // apply-time finite check is unreachable via a real file; this test
+        // pins the reason, so a future switch to a lenient parser is noticed.
+        let json = r#"{"format":"mc-locate-observations","version":1,
+            "eye_throws":[{"x": 0.0, "z": 0.0, "yaw": 1e999}]}"#;
+        assert!(serde_json::from_str::<ObservationFile>(json).is_err());
+
+        // And a value built in memory is still filtered, which is what the
+        // guard actually protects.
+        let file = ObservationFile {
+            eye_throws: vec![EyeThrowDto { x: 0.0, z: 0.0, yaw: f64::INFINITY }],
+            ..ObservationFile::from_session(&Session::default(), None)
+        };
+        let mut session = Session::default();
+        let summary = file.apply_to_session(&mut session, false).unwrap();
+        assert_eq!(summary.eye_throws, 0);
+        assert!(session.eye_throws.is_empty());
+        assert_eq!(summary.warnings.len(), 1);
     }
 }

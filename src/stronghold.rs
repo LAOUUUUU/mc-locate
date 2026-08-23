@@ -381,6 +381,27 @@ pub fn run(session: &mut Session) -> Result<()> {
     ui::note("One throw narrows it to an arc; two from well-separated spots pin it down.");
 
     let mut throws: Vec<Throw> = Vec::new();
+
+    // Bearings captured by the exporter mod come straight off the eye entity,
+    // so they are exact where an F3 reading is eyeballed. Offer them rather
+    // than making the player retype what the mod already measured.
+    if !session.eye_throws.is_empty() {
+        println!();
+        ui::note(&format!(
+            "{} eye throw(s) imported from the exporter mod:",
+            session.eye_throws.len()
+        ));
+        for t in &session.eye_throws {
+            println!("    ({:.1}, {:.1}) facing {:.2}°", t.x, t.z, t.yaw);
+        }
+        if ui::confirm("Use these?", true)? {
+            throws.extend(session.eye_throws.iter().copied());
+            if throws.len() >= 2 && !ui::confirm("Add another throw by hand?", false)? {
+                return finish(session, throws);
+            }
+        }
+    }
+
     loop {
         println!();
         ui::note(&format!("Throw {}", throws.len() + 1));
@@ -399,6 +420,11 @@ pub fn run(session: &mut Session) -> Result<()> {
         }
     }
 
+    finish(session, throws)
+}
+
+/// Everything after the throws are gathered, however they were gathered.
+fn finish(session: &mut Session, throws: Vec<Throw>) -> Result<()> {
     if throws.len() >= 2 {
         // Two throws from nearly the same spot give nearly the same ray, and
         // the intersection becomes wildly sensitive to measurement error.

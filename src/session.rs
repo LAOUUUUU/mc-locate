@@ -113,6 +113,9 @@ pub struct Session {
     /// Observed End pillar heights, in the fixed pillar order used by
     /// [`crate::multicrack::PILLAR_POSITIONS`]. `None` for unobserved pillars.
     pub pillar_heights: Option<[Option<i32>; 10]>,
+    /// Eye-of-ender bearings imported from the exporter mod, offered as a
+    /// starting point by the stronghold mode.
+    pub eye_throws: Vec<crate::stronghold::Throw>,
 }
 
 impl Session {

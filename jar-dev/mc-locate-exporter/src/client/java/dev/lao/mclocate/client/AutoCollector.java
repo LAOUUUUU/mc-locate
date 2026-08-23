@@ -1,0 +1,190 @@
+package dev.lao.mclocate.client;
+
+import java.util.List;
+
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLevelEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.projectile.EyeOfEnder;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+
+/**
+ * Passive collection: watches the world as you play instead of waiting for a
+ * command.
+ *
+ * <p>The point is not convenience. Bedrock is a filter rather than a search —
+ * it cannot find a seed on its own, it can only strike candidates off a list
+ * that something else produced. The list normally comes from the End pillars,
+ * which enumerate 2^32 structure seeds from a single observation. So the
+ * intended shape of a session is: read the pillars once, then simply play,
+ * while the Nether floor quietly narrows what is left.
+ */
+public final class AutoCollector {
+	/** Ticks to keep retrying the pillar read after arriving in the End. */
+	private static final int PILLAR_RETRY_TICKS = 400;
+
+	private final Session session;
+	private final Config config;
+	private final EyeTracker eyes = new EyeTracker();
+
+	private int pillarRetriesLeft;
+	private boolean pillarsDone;
+
+	/** Announce progress at most this often, in ticks, to avoid chat spam. */
+	private static final int ANNOUNCE_INTERVAL = 200;
+	private int sinceAnnounce;
+	private int collectedSinceAnnounce;
+
+	public AutoCollector(Session session, Config config) {
+		this.session = session;
+		this.config = config;
+	}
+
+	public void register() {
+		ClientChunkEvents.CHUNK_LOAD.register((level, chunk) -> onChunkLoad(level, chunk));
+		ClientEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+			if (config.autoEyes && entity instanceof EyeOfEnder eye) {
+				eyes.watch(eye);
+			}
+		});
+		ClientLevelEvents.AFTER_CLIENT_LEVEL_CHANGE.register((client, level) -> onLevelChange(level));
+		ClientTickEvents.END_CLIENT_TICK.register(client -> onTick(client));
+	}
+
+	private void onLevelChange(Level level) {
+		// Eyes do not survive a dimension change, and a stale entity reference
+		// would report a bearing measured in a world we have left.
+		eyes.forget();
+
+		if (level != null && Level.END.equals(level.dimension())) {
+			pillarsDone = false;
+			pillarRetriesLeft = PILLAR_RETRY_TICKS;
+		} else {
+			pillarRetriesLeft = 0;
+		}
+	}
+
+	private void onChunkLoad(Level level, LevelChunk chunk) {
+		if (!config.autoBedrock || level == null || !Level.NETHER.equals(level.dimension())) {
+			return;
+		}
+		int originX = chunk.getPos().x() << 4;
+		int originZ = chunk.getPos().z() << 4;
+		int added = sampleLayer(level, originX, originZ, Collector.FLOOR_Y)
+				+ sampleLayer(level, originX, originZ, Collector.ROOF_Y);
+		collectedSinceAnnounce += added;
+	}
+
+	/**
+	 * Samples one 16x16 chunk layer on a stride.
+	 *
+	 * <p>Every block in the layer would be 256 observations per chunk per
+	 * level, which is far past the point of diminishing returns: roughly 45
+	 * samples already carry the ~32 bits needed to pick a single seed out of
+	 * the pillar candidates. The stride spends the budget over more chunks
+	 * instead, which also spreads it over more of the layer seed's output.
+	 */
+	private int sampleLayer(Level level, int originX, int originZ, int y) {
+		int added = 0;
+		int stride = Math.max(1, config.bedrockStride);
+		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+
+		for (int dx = 0; dx < 16; dx += stride) {
+			for (int dz = 0; dz < 16; dz += stride) {
+				int x = originX + dx;
+				int z = originZ + dz;
+				pos.set(x, y, z);
+
+				// The chunk that fired the event is loaded, but isLoaded also
+				// covers the y range, and a wrong answer here is poison: air
+				// from an unloaded section reads as a confident "no bedrock".
+				if (!level.isLoaded(pos)) {
+					continue;
+				}
+				BlockState state = level.getBlockState(pos);
+				if (session.addBedrock(x, y, z, state.getBlock() == Blocks.BEDROCK, config.maxBedrock)) {
+					added++;
+				}
+			}
+		}
+		return added;
+	}
+
+	private void onTick(Minecraft client) {
+		if (client.level == null) {
+			return;
+		}
+		if (config.autoEyes) {
+			List<EyeTracker.Throw> readings = eyes.tick();
+			for (EyeTracker.Throw t : readings) {
+				session.addThrow(t);
+				say(client, String.format(java.util.Locale.ROOT,
+						"§bmc-locate§r eye bearing %.2f° from (%.0f, %.0f) — %d throw(s)",
+						t.yaw(), t.x(), t.z(), session.throwCount()));
+			}
+		}
+		tickPillars(client);
+		tickAnnounce(client);
+	}
+
+	private void tickPillars(Minecraft client) {
+		if (pillarsDone || pillarRetriesLeft <= 0 || !config.autoPillars) {
+			return;
+		}
+		pillarRetriesLeft--;
+
+		// Only worth a look once a second; the scan touches ten columns and
+		// nothing changes between ticks.
+		if (pillarRetriesLeft % 20 != 0) {
+			return;
+		}
+		Integer[] heights = Collector.collectPillarHeights(client.level);
+		int measured = Collector.measuredPillars(heights);
+
+		if (measured == 0) {
+			return;
+		}
+		if (!Collector.heightsLookValid(heights)) {
+			// Something other than a pillar was measured. Writing this would
+			// eliminate the true seed, so keep waiting instead.
+			return;
+		}
+		if (measured < heights.length && pillarRetriesLeft > 20) {
+			// Partial reads still constrain the seed, but hold out for the full
+			// set while there is time left on the clock.
+			return;
+		}
+		session.setPillarHeights(heights);
+		pillarsDone = true;
+		say(client, "§bmc-locate§r read " + measured
+				+ "/10 End pillars — run §e/mclocate export§r when ready");
+	}
+
+	private void tickAnnounce(Minecraft client) {
+		if (!config.announce || collectedSinceAnnounce == 0) {
+			return;
+		}
+		if (++sinceAnnounce < ANNOUNCE_INTERVAL) {
+			return;
+		}
+		sinceAnnounce = 0;
+		int n = session.bedrockCount();
+		say(client, String.format(java.util.Locale.ROOT,
+				"§bmc-locate§r +%d bedrock (%d total, ≈%.1f bits)",
+				collectedSinceAnnounce, n, n * 0.7219280948873623));
+		collectedSinceAnnounce = 0;
+	}
+
+	private static void say(Minecraft client, String message) {
+		if (client.player != null) {
+			client.player.sendSystemMessage(Component.literal(message));
+		}
+	}
+}
