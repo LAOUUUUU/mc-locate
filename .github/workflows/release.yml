@@ -9,6 +9,10 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # A newer runner is needed because macos-14's clang rejects the loot tables'
+  # static initialisers as non-constant. Pin the deployment target so the newer
+  # SDK does not quietly raise the minimum macOS the binaries will run on.
+  MACOSX_DEPLOYMENT_TARGET: "13.0"
 
 jobs:
   build:
@@ -24,7 +28,7 @@ jobs:
           # cross-compiles to x86_64 from Apple Silicon without extra setup, so
           # `lipo` can fuse both slices into a single download that works on
           # every Mac.
-          - os: macos-14
+          - os: macos-15
             target: universal-apple-darwin
             label: macos-universal
           # 22.04 rather than latest: binaries link against its older glibc,
