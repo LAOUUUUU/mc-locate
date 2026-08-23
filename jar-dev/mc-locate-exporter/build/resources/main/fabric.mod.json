@@ -1,0 +1,22 @@
+{
+	"schemaVersion": 1,
+	"id": "mc-locate-exporter",
+	"version": "0.1.0",
+	"name": "mc-locate exporter",
+	"description": "Collects nether bedrock, End pillar heights and coordinates, and writes them in mc-locate's observation format.",
+	"authors": ["LAOUUUUU"],
+	"contact": {
+		"sources": "https://github.com/LAOUUUUU/mc-locate"
+	},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": ["dev.lao.mclocate.client.ExporterClient"]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}

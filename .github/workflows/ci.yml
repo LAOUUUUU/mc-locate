@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 
@@ -34,6 +34,12 @@ jobs:
             choco install llvm -y --no-progress
           }
           "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+          # The cubiomes C uses variable-length arrays and variably-modified
+          # pointer types — standard C99, but MSVC has never implemented them
+          # and errors out. clang-cl accepts them while still targeting the
+          # MSVC ABI, so the resulting binary is an ordinary MSVC-linked exe.
+          "CC_x86_64_pc_windows_msvc=clang-cl" >> $env:GITHUB_ENV
+          "CFLAGS_x86_64_pc_windows_msvc=-Wno-vla-extension" >> $env:GITHUB_ENV
 
       - name: Cache cargo
         uses: actions/cache@v4
