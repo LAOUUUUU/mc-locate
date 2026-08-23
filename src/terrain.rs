@@ -357,13 +357,23 @@ pub fn run(session: &mut Session) -> Result<()> {
     let seed = ui::prompt_seed(session)?;
     let version = ui::prompt_version(session)?;
 
-    let kind = ui::select_str(
-        "What kind of pattern have you transcribed?",
-        &[
-            "Biome grid (biome names, '?' for unknown)",
-            "Height grid (numbers, '?' for unknown)",
-        ],
-    )?;
+    // Beta has no surface-height approximation in cubiomes, so offering the
+    // height option there would only lead to a failure several prompts later.
+    let kind = if version.supports_height_map() {
+        ui::select_str(
+            "What kind of pattern have you transcribed?",
+            &[
+                "Biome grid (biome names, '?' for unknown)",
+                "Height grid (numbers, '?' for unknown)",
+            ],
+        )?
+    } else {
+        ui::note(&format!(
+            "{} has no surface height data in cubiomes, so only biome patterns are available.",
+            version.label()
+        ));
+        0
+    };
 
     let scale_idx = ui::select_str(
         "How many blocks does one grid cell cover?",

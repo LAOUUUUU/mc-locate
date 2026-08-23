@@ -48,6 +48,17 @@ advice is exact rather than estimated.
 Mode 3 reads F3 overlays, mode 7 scrapes chat and logs (live or from a file),
 mode 13 watches your screenshots folder and reads new ones as you take them.
 
+## When Minecraft is newer than the generator
+
+Every version-specific constant comes from cubiomes. The bundled build reaches
+26.2 — current Minecraft — but the game will move ahead again. Rather than let
+you pick a nearby version and quietly generate the wrong world, the version menu
+has a "Newer than ..." entry: generator-backed modes then refuse, and the rest
+carry on.
+
+Slime chunks, nether bedrock, End pillars and portal maths never consult the
+generator, so they work on any version at all.
+
 ## Saving your work
 
 Mode 13 writes everything to a JSON file and reads it back. That same format is

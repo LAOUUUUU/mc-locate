@@ -14,7 +14,7 @@ from limited in-game observations**
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-lightgrey)
 ![Rust](https://img.shields.io/badge/rust-2024%20edition-orange?logo=rust&logoColor=white)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-![Minecraft](https://img.shields.io/badge/Minecraft-1.8.9%20%E2%86%92%201.21-62B47A)
+![Minecraft](https://img.shields.io/badge/Minecraft-Beta%201.7%20%E2%86%92%2026.2-62B47A)
 
 [**Download**](https://github.com/LAOUUUUU/mc-locate/releases/latest) &nbsp;·&nbsp;
 [Install](#install) &nbsp;·&nbsp;
@@ -41,6 +41,7 @@ enough to collapse the space to a single seed.
 |---|---|
 | **14 modes** | seed cracking, coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
 | **212 tests** | every RNG formula checked against an independent source, not from memory |
+| **34 versions** | Beta 1.7 through 26.2 — current Minecraft |
 | **3 platforms** | one universal macOS binary, Linux x86_64, Windows x86_64 |
 | **No setup** | no Rust, no Java, no Minecraft install needed to run it |
 
@@ -410,6 +411,50 @@ It is a terminal program, and it tries to be a good one.
 * **Results are marked** — `→` for a recovered answer, `✓` / `!` / `✗` for
   outcome — so the thing you came for is findable in a wall of explanation.
 * **The status bar** shows what the session is carrying between modes.
+
+## Version support
+
+**Beta 1.7 through 26.2** — 34 versions, up to and including current Minecraft.
+
+Every version-specific constant (structure salts, region grids, biome
+pipelines) comes from cubiomes rather than being hardcoded. That is deliberate:
+a stale salt produces confident nonsense.
+
+The published `cubiomes` crates vendor Cubitect's C library, which has been
+dormant since November 2024 and stops at 1.21.4 — while Minecraft moved to
+year-based versions and is now on 26.2. So this builds against
+[`xpple/cubiomes`](https://github.com/xpple/cubiomes), an actively maintained
+fork, via a `[patch.crates-io]` pointing at
+[a fork of the Rust wrapper](https://github.com/LAOUUUUU/cubiomes-rs) whose only
+change is the submodule it points at. Every symbol is signature-compatible, and
+the C revision is pinned rather than tracked, because that fork is under active
+refactoring.
+
+A test asserts the backend still reaches 26.2, so a dependency change that
+quietly reverted it — which would make every modern-world answer wrong with no
+other symptom — fails loudly instead.
+
+**Newer than 26.2?** Pick "Newer than 26.2" in the version menu. Modes that
+generate world data refuse it rather than substituting a nearby version and
+giving confident, wrong answers. Everything that does not consult the generator
+keeps working on any version at all:
+
+* **Slime chunks** (mode 4) — those constants are unchanged since Beta 1.4
+* **Nether bedrock** (mode 1) — the 1.18+ per-position formula
+* **End pillars** and the seed maths in mode 9, **portal conversion** (mode 11)
+
+Note that **1.21.4 is what cubiomes calls "1.21 WD"** — the constant was written
+before the Winter Drop shipped and never renamed.
+
+Older versions carry real differences the tool accounts for rather than
+papering over:
+
+* **Before 1.9** a world has **three** strongholds, not 128 across 8 rings, so
+  mode 10's ring prior does not apply and says so.
+* **Beta** has no surface-height approximation in cubiomes, so mode 2 offers
+  biome patterns only rather than failing several prompts later.
+* **Before 1.13** desert pyramids, swamp huts and igloos shared one salt.
+* **Before 1.18** nether bedrock is not seed-dependent, so mode 1b cannot work.
 
 ## Built on
 

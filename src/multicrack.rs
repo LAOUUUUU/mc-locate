@@ -167,6 +167,7 @@ pub struct ConstraintSet {
     bedrock: Vec<BedrockObservation>,
     /// `(region attempt position, tolerance)` per observed structure.
     structures: Vec<StructureConstraint>,
+    skipped_structures: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -179,9 +180,16 @@ struct StructureConstraint {
 }
 
 impl ConstraintSet {
+    /// Compiles the session's observations.
+    ///
+    /// `version` is optional because only structures need the generator. On a
+    /// Minecraft newer than the bundled worldgen library, slime chunks and
+    /// bedrock still constrain the seed perfectly well — refusing the whole
+    /// mode over the one source that cannot be evaluated would throw away the
+    /// two that can.
     pub fn build(
         session: &Session,
-        version: Version,
+        version: Option<Version>,
         structure_tolerance: i32,
     ) -> Result<ConstraintSet> {
         let slime = if session.slime.is_empty() {
@@ -191,6 +199,16 @@ impl ConstraintSet {
         };
 
         let mut structures = Vec::new();
+        let mut skipped_structures = 0usize;
+        let Some(version) = version else {
+            skipped_structures = session.structures.len();
+            return Ok(ConstraintSet {
+                slime,
+                bedrock: session.bedrock.clone(),
+                structures,
+                skipped_structures,
+            });
+        };
         for obs in &session.structures {
             let region = cubiomes::structures::StructureRegion::from_block_position(
                 cubiomes::generator::BlockPosition::new(obs.x, obs.z),
@@ -217,7 +235,14 @@ impl ConstraintSet {
             slime,
             bedrock: session.bedrock.clone(),
             structures,
+            skipped_structures,
         })
+    }
+
+    /// Structure observations that could not be used because the version is
+    /// past what the generator supports.
+    pub fn skipped_structures(&self) -> usize {
+        self.skipped_structures
     }
 
     pub fn is_empty(&self) -> bool {
@@ -405,17 +430,38 @@ pub fn run(session: &mut Session) -> Result<()> {
         "Feed in whatever you have. Each source is weak alone; together they collapse the space.",
     );
 
-    let version = ui::prompt_version(session)?;
+    let chosen = ui::prompt_version_any(session)?;
+    let version = chosen.generated();
+
+    if version.is_none() {
+        ui::warn(&format!(
+            "{} is past the bundled generator, so structure positions cannot be used here.",
+            chosen.label()
+        ));
+        ui::note(
+            "End pillars, slime chunks and nether bedrock all still work — none of them consult \
+             the generator. The pillar route is unaffected.",
+        );
+    }
 
     // Gather whatever the user has, reusing anything earlier modes left behind.
     gather_pillars(session)?;
-    gather_structures(session, version)?;
+    if let Some(v) = version {
+        gather_structures(session, v)?;
+    }
     gather_slime(session)?;
     gather_bedrock(session)?;
 
     println!();
     let tolerance: i32 = ui::input_default("Structure position tolerance (blocks)", 16)?;
     let constraints = ConstraintSet::build(session, version, tolerance)?;
+
+    if constraints.skipped_structures() > 0 {
+        ui::warn(&format!(
+            "{} structure observation(s) ignored — they need the generator.",
+            constraints.skipped_structures()
+        ));
+    }
 
     ui::note("Constraints in play:");
     if constraints.is_empty() {
@@ -444,7 +490,12 @@ pub fn run(session: &mut Session) -> Result<()> {
         // Structures alone are still enough, via bit-lifting: a structure's
         // in-region offset modulo a power of two is fixed by the low bits of
         // the seed, so a cheap sieve replaces the pillar shortcut entirely.
-        let lift_obs = crate::lifting::observations_from_session(version, &session.structures);
+        // Lifting reads per-version salts and chunk ranges out of cubiomes, so
+        // it is only available when the generator knows the version.
+        let lift_obs = match version {
+            Some(v) => crate::lifting::observations_from_session(v, &session.structures),
+            None => Ok(Vec::new()),
+        };
         let sieve = match &lift_obs {
             Ok(obs) if !obs.is_empty() => crate::lifting::Sieve::new(obs).ok(),
             _ => None,
@@ -769,7 +820,7 @@ fn gather_bedrock(session: &mut Session) -> Result<()> {
     Ok(())
 }
 
-fn report(session: &mut Session, version: Version, found: Vec<i64>) -> Result<()> {
+fn report(session: &mut Session, version: Option<Version>, found: Vec<i64>) -> Result<()> {
     println!();
     if found.is_empty() {
         ui::warn("No seed satisfies every constraint.");
@@ -814,6 +865,15 @@ fn report(session: &mut Session, version: Version, found: Vec<i64>) -> Result<()
         "These are structure seeds — the low 48 bits. Structures, slime and bedrock all depend \
          only on those, so 65,536 world seeds share each one. Biome data separates them.",
     );
+
+    // Recovering the top 16 bits reads biomes, so it needs the generator.
+    let Some(version) = version else {
+        ui::note(
+            "The upper 16 bits need biome data, which the bundled generator cannot produce for \
+             this version — the structure seed above is as far as it goes here.",
+        );
+        return Ok(());
+    };
 
     if found.len() == 1
         && ui::confirm("Recover the full 64-bit world seed from biome observations?", true)?
@@ -1045,7 +1105,7 @@ mod tests {
             })
             .collect();
 
-        let cs = ConstraintSet::build(&session, version, 16).unwrap();
+        let cs = ConstraintSet::build(&session, Some(version), 16).unwrap();
         assert!(!cs.is_empty());
         assert!(cs.accepts(structure_seed), "the true seed must pass");
 
@@ -1058,6 +1118,57 @@ mod tests {
         }
         assert_eq!(rejected, 20, "neighbouring seeds should all fail");
         assert!(cs.survival_fraction() < 1e-6);
+    }
+
+    #[test]
+    fn constraints_still_work_without_a_generator_version() {
+        // A player on a Minecraft newer than the bundled worldgen library must
+        // not lose slime and bedrock constraints just because their structure
+        // observations cannot be evaluated.
+        let version = Version::V1_21_1;
+        let world_seed = 1234i64;
+        let structure_seed = (world_seed as u64 & MASK) as i64;
+
+        let mut world = WorldGen::overworld(version, world_seed);
+        let villages = world
+            .structures_in_box(cubiomes::enums::StructureType::Village, -2000, -2000, 2000, 2000)
+            .unwrap();
+
+        let session = Session {
+            structures: villages
+                .iter()
+                .take(2)
+                .map(|p| StructureObservation {
+                    structure: cubiomes::enums::StructureType::Village,
+                    x: p.x,
+                    z: p.z,
+                })
+                .collect(),
+            slime: (0..6)
+                .map(|i| SlimeObservation {
+                    chunk_x: i,
+                    chunk_z: i * 3,
+                    is_slime: slime::is_slime_chunk(structure_seed, i, i * 3),
+                })
+                .collect(),
+            ..Default::default()
+        };
+
+        // With a version: structures count, nothing skipped.
+        let with = ConstraintSet::build(&session, Some(version), 16).unwrap();
+        assert_eq!(with.skipped_structures(), 0);
+        assert!(with.accepts(structure_seed));
+
+        // Without: structures are dropped and reported, slime still applies.
+        let without = ConstraintSet::build(&session, None, 16).unwrap();
+        assert_eq!(without.skipped_structures(), 2, "the drop must be reported, not silent");
+        assert!(!without.is_empty(), "slime constraints should remain");
+        assert!(without.accepts(structure_seed), "the true seed must still pass");
+
+        // And it still discriminates — a neighbouring seed fails.
+        assert!(!without.accepts(structure_seed + 1));
+        // Necessarily weaker than the full set, though.
+        assert!(without.survival_fraction() > with.survival_fraction());
     }
 
     #[test]

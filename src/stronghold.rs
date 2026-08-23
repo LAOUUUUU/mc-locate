@@ -420,6 +420,19 @@ pub fn run(session: &mut Session) -> Result<()> {
     }
     let top_n: usize = ui::input_default("How many candidates to show", 5usize)?;
 
+    // The eight-ring layout is a 1.9 thing. Before that a world had three
+    // strongholds placed differently, and RINGS does not describe them.
+    if let Some(v) = session.version
+        && !v.has_stronghold_rings()
+    {
+        ui::warn(&format!(
+            "{} generates only {} stronghold(s), not the 128 across 8 rings this mode's prior \
+             assumes. Ring estimates will be wrong; use the seed-based path if you can.",
+            v.label(),
+            v.stronghold_count()
+        ));
+    }
+
     let nearest_only = ui::confirm(
         "Assume the eye pointed at the NEAREST stronghold? (true unless you have travelled very far out)",
         true,

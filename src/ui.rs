@@ -183,17 +183,105 @@ pub fn parse_seed(raw: &str) -> Result<i64> {
     Ok(crate::random::java_string_hash(trimmed) as i64)
 }
 
-pub fn prompt_version(session: &mut Session) -> Result<Version> {
+/// A version the user picked, which may be beyond what the generator knows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChosenVersion {
+    /// The bundled generator can generate this version.
+    Generated(Version),
+    /// Newer than the generator supports. Structure and biome generation are
+    /// unavailable; anything that does not consult cubiomes still works.
+    Newer(String),
+}
+
+impl ChosenVersion {
+    pub fn label(&self) -> String {
+        match self {
+            ChosenVersion::Generated(v) => v.label().to_string(),
+            ChosenVersion::Newer(s) => s.clone(),
+        }
+    }
+
+    /// Everything past the generator's ceiling is comfortably 1.18+.
+    pub fn is_1_18_plus(&self) -> bool {
+        match self {
+            ChosenVersion::Generated(v) => v.is_1_18_plus(),
+            ChosenVersion::Newer(_) => true,
+        }
+    }
+
+    pub fn generated(&self) -> Option<Version> {
+        match self {
+            ChosenVersion::Generated(v) => Some(*v),
+            ChosenVersion::Newer(_) => None,
+        }
+    }
+}
+
+/// The newest version the bundled generator can produce.
+pub fn newest_supported() -> Version {
+    Version::ALL[0]
+}
+
+/// Asks for a version, allowing one newer than the generator supports.
+///
+/// For modes that do not consult cubiomes — nether bedrock, slime chunks, End
+/// pillars — where all that matters is which side of a formula boundary the
+/// version falls on.
+pub fn prompt_version_any(session: &mut Session) -> Result<ChosenVersion> {
     if let Some(v) = session.version
         && confirm(&format!("Use the session version ({})?", v.label()), true)?
     {
-        return Ok(v);
+        return Ok(ChosenVersion::Generated(v));
     }
-    let labels: Vec<String> = Version::ALL.iter().map(|v| v.label().to_string()).collect();
+    if let Some(v) = session.newer_version.clone()
+        && confirm(&format!("Use the session version ({v})?"), true)?
+    {
+        return Ok(ChosenVersion::Newer(v));
+    }
+
+    let newest = newest_supported();
+    let mut labels: Vec<String> = Version::ALL.iter().map(|v| v.label().to_string()).collect();
+    labels.push(format!("Newer than {} (e.g. 26.2)", newest.label()));
+
     let idx = select("Minecraft version", &labels)?;
-    let v = Version::ALL[idx];
-    session.version = Some(v);
-    Ok(v)
+    if idx < Version::ALL.len() {
+        let v = Version::ALL[idx];
+        session.version = Some(v);
+        session.newer_version = None;
+        return Ok(ChosenVersion::Generated(v));
+    }
+
+    let typed: String = input_default("Which version?", "26.2".to_string())?;
+    let typed = typed.trim().to_string();
+    if typed.is_empty() {
+        bail!("a version is required");
+    }
+    note(&format!(
+        "Recorded as {typed}. Modes that generate structures, biomes or strongholds cannot run \
+         on it — the bundled worldgen library stops at {}. Slime chunks, nether bedrock, End \
+         pillars and portal maths are unaffected and work on any version.",
+        newest.label()
+    ));
+    session.version = None;
+    session.newer_version = Some(typed.clone());
+    Ok(ChosenVersion::Newer(typed))
+}
+
+/// Asks for a version the generator can actually generate.
+///
+/// Refuses a newer one rather than quietly substituting the closest supported
+/// version, which would produce confident, wrong structures and biomes.
+pub fn prompt_version(session: &mut Session) -> Result<Version> {
+    match prompt_version_any(session)? {
+        ChosenVersion::Generated(v) => Ok(v),
+        ChosenVersion::Newer(v) => bail!(
+            "this mode generates world data, and the bundled generator stops at {} — it cannot \
+             generate {v}. Picking a nearby supported version instead would give confident, \
+             wrong answers, so it is refused. Modes 1, 4, 11 and the pillar route in 9 do not \
+             need the generator and still work.",
+            newest_supported().label()
+        ),
+    }
 }
 
 /// Prompts for a bounding box, offering the session's stored one if present.
@@ -337,6 +425,50 @@ mod tests {
         assert_eq!(humanize_duration(600.0), "10 minutes");
         assert!(humanize_duration(36000.0).ends_with("hours"));
         assert!(humanize_duration(3_600_000.0).ends_with("days"));
+    }
+
+    #[test]
+    fn a_newer_version_is_usable_but_not_generatable() {
+        // The whole point of ChosenVersion: a player on 26.2 can still use the
+        // formula-only modes, and is refused — loudly — by the ones that would
+        // otherwise generate the wrong world.
+        let newer = ChosenVersion::Newer("26.2".to_string());
+        assert_eq!(newer.label(), "26.2");
+        assert!(newer.is_1_18_plus(), "anything past the ceiling is 1.18+");
+        assert_eq!(newer.generated(), None, "it must not map to a generator version");
+
+        let known = ChosenVersion::Generated(Version::V1_16_5);
+        assert_eq!(known.generated(), Some(Version::V1_16_5));
+        assert!(!known.is_1_18_plus());
+        assert_eq!(known.label(), "1.16.5");
+    }
+
+    #[test]
+    fn the_newest_supported_version_is_the_top_of_the_menu() {
+        // prompt_version's refusal message quotes this, so it must not drift.
+        assert_eq!(newest_supported(), Version::ALL[0]);
+    }
+
+    #[test]
+    fn the_backend_has_not_regressed_below_current_minecraft() {
+        // A drift guard in the other direction from the version menu.
+        //
+        // The whole tool's correctness rests on the bundled generator knowing
+        // the version being generated; picking a nearby one silently produces
+        // the wrong world. If a dependency change quietly reverts the backend
+        // to the dormant upstream (which stops at 1.21.4), every
+        // structure-and-biome answer for a modern world becomes wrong with no
+        // other symptom. This fails loudly instead.
+        //
+        // Minecraft was on 26.2 as of 2026-08-22. When the game moves ahead of
+        // the generator again this test still passes — it only catches going
+        // *backwards*. Raise the bound when the backend gains a newer version.
+        assert!(
+            newest_supported().at_least(cubiomes::enums::MCVersion::MC_26_2),
+            "the worldgen backend only reaches {}, below the 26.2 it should support — \
+             has the cubiomes patch in Cargo.toml stopped applying?",
+            newest_supported().label()
+        );
     }
 
     #[test]
