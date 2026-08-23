@@ -36,10 +36,14 @@ public class ExporterClient implements ClientModInitializer {
 	private static final int MAX_RADIUS = 128;
 
 	/** Structure names mc-locate understands, for {@code /mclocate mark}. */
+	// Every name here is one the CLI's parse_structure accepts; the Rust test
+	// exporter_structure_names locks the two lists together.
 	private static final String[] KNOWN_STRUCTURES = {
 		"village", "desert_pyramid", "jungle_temple", "swamp_hut", "igloo",
-		"pillager_outpost", "ocean_monument", "woodland_mansion", "ruined_portal",
-		"shipwreck", "buried_treasure", "fortress", "bastion", "end_city",
+		"ocean_ruin", "shipwreck", "ocean_monument", "woodland_mansion",
+		"pillager_outpost", "ruined_portal", "ancient_city", "buried_treasure",
+		"mineshaft", "trail_ruins", "trial_chambers", "nether_fortress",
+		"bastion_remnant", "ruined_portal_nether", "end_city", "end_gateway",
 	};
 
 	private final Session session = new Session();
@@ -49,7 +53,15 @@ public class ExporterClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		Path dir = outputDirectory();
 		config = Config.load(dir);
-		new AutoCollector(session, config).register();
+
+		// Restore a session left by a previous run, so a crash or a forgotten
+		// export does not throw away an afternoon of collecting.
+		String restored = Persistence.load(dir, session, config.maxBedrock);
+		if (restored != null) {
+			LOGGER.info("mc-locate: {}", restored);
+		}
+
+		new AutoCollector(session, config, dir).register();
 
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registry) -> {
 			LiteralArgumentBuilder<FabricClientCommandSource> root = literal("mclocate");
@@ -92,6 +104,25 @@ public class ExporterClient implements ClientModInitializer {
 					.then(argument("type", StringArgumentType.word())
 							.executes(ctx -> mark(ctx.getSource(),
 									StringArgumentType.getString(ctx, "type")))));
+
+			root.then(literal("seed")
+					.executes(ctx -> captureSeed(ctx.getSource())));
+
+			// Slime chunks are recorded by hand: a single slime spawn is not
+			// proof (swamps spawn them too), so the player confirms it. `slime`
+			// marks the current chunk as a slime chunk, `slime not` as confirmed
+			// ordinary. A wrong "yes" here eliminates the true seed, hence manual.
+			root.then(literal("slime")
+					.executes(ctx -> markSlime(ctx.getSource(), true))
+					.then(literal("not").executes(ctx -> markSlime(ctx.getSource(), false))));
+
+			root.then(literal("config")
+					.executes(ctx -> showConfig(ctx.getSource()))
+					.then(argument("key", StringArgumentType.word())
+							.then(argument("value", StringArgumentType.word())
+									.executes(ctx -> setConfig(ctx.getSource(),
+											StringArgumentType.getString(ctx, "key"),
+											StringArgumentType.getString(ctx, "value"))))));
 
 			dispatcher.register(root);
 		});
@@ -179,11 +210,14 @@ public class ExporterClient implements ClientModInitializer {
 				session.bedrockCount(), session.bedrockCount() * 0.7219280948873623,
 				session.droppedCount() > 0 ? " §7[" + session.droppedCount() + " dropped at cap]" : ""));
 		feedback(source, "  pillars: " + (session.hasPillars() ? "§arecorded" : "§7none"));
+		feedback(source, "  slime chunks: §a" + session.slimeCount());
 		feedback(source, "  eye throws: §a" + session.throwCount());
 		feedback(source, "  structures: §a" + session.structureCount());
 		feedback(source, "  passive: " + (config.autoBedrock ? "§aon" : "§coff"));
 
-		if (session.hasPillars()) {
+		if (session.hasSeed()) {
+			feedback(source, "  §aseed known§r — export and you are done; no cracking needed");
+		} else if (session.hasPillars()) {
 			// The pillar shortcut leaves 2^32 structure seeds; bedrock is what
 			// carves that down to one.
 			double left = session.expectedSurvivorsOf(4294967296.0);
@@ -231,6 +265,70 @@ public class ExporterClient implements ClientModInitializer {
 		int z = (int) Math.floor(client.player.getZ());
 		session.addStructure(normalised, x, z);
 		feedback(source, "Marked §a" + normalised + "§r at " + x + ", " + z + ".");
+		return 1;
+	}
+
+	private int captureSeed(FabricClientCommandSource source) {
+		Minecraft client = Minecraft.getInstance();
+		if (!client.hasSingleplayerServer() || client.getSingleplayerServer() == null
+				|| client.getSingleplayerServer().overworld() == null) {
+			feedback(source, "§cThe seed is only readable in your own singleplayer world.");
+			return 0;
+		}
+		long seed = client.getSingleplayerServer().overworld().getSeed();
+		session.setSeed(seed);
+		feedback(source, "Recorded world seed §a" + seed + "§r.");
+		return 1;
+	}
+
+	private int markSlime(FabricClientCommandSource source, boolean isSlime) {
+		Minecraft client = Minecraft.getInstance();
+		if (client.player == null) {
+			feedback(source, "§cNo world loaded.");
+			return 0;
+		}
+		int chunkX = Math.floorDiv((int) Math.floor(client.player.getX()), 16);
+		int chunkZ = Math.floorDiv((int) Math.floor(client.player.getZ()), 16);
+		session.addSlime(chunkX, chunkZ, isSlime);
+		feedback(source, "Chunk §a" + chunkX + ", " + chunkZ + "§r marked "
+				+ (isSlime ? "§aslime" : "§cnot slime") + "§r.");
+		if (isSlime) {
+			feedback(source, "§7Only mark a chunk you have confirmed by a slime spawn below y=40.");
+		}
+		return 1;
+	}
+
+	private int showConfig(FabricClientCommandSource source) {
+		feedback(source, "§bmc-locate config§r  (change with §e/mclocate config <key> <value>§r)");
+		feedback(source, "  autoBedrock = " + config.autoBedrock);
+		feedback(source, "  autoPillars = " + config.autoPillars);
+		feedback(source, "  autoEyes = " + config.autoEyes);
+		feedback(source, "  announce = " + config.announce);
+		feedback(source, "  bedrockStride = " + config.bedrockStride + "  §7(1-16)");
+		feedback(source, "  maxBedrock = " + config.maxBedrock);
+		return 1;
+	}
+
+	private int setConfig(FabricClientCommandSource source, String key, String value) {
+		try {
+			switch (key.toLowerCase(Locale.ROOT)) {
+				case "autobedrock" -> config.autoBedrock = Boolean.parseBoolean(value);
+				case "autopillars" -> config.autoPillars = Boolean.parseBoolean(value);
+				case "autoeyes" -> config.autoEyes = Boolean.parseBoolean(value);
+				case "announce" -> config.announce = Boolean.parseBoolean(value);
+				case "bedrockstride" -> config.bedrockStride = Math.max(1, Math.min(16, Integer.parseInt(value)));
+				case "maxbedrock" -> config.maxBedrock = Math.max(64, Integer.parseInt(value));
+				default -> {
+					feedback(source, "§cUnknown key §e" + key + "§c. See §e/mclocate config§c.");
+					return 0;
+				}
+			}
+		} catch (NumberFormatException e) {
+			feedback(source, "§c'" + value + "' is not a valid value for " + key + ".");
+			return 0;
+		}
+		config.save();
+		feedback(source, "Set §a" + key + "§r = §a" + value + "§r.");
 		return 1;
 	}
 

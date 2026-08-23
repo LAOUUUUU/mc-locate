@@ -809,3 +809,78 @@ mod eye_throw_tests {
         assert_eq!(summary.warnings.len(), 1);
     }
 }
+
+#[cfg(test)]
+mod mod_contract_tests {
+    use super::*;
+
+    /// A document shaped exactly like what the Fabric exporter writes — same
+    /// field names, same nesting, including the singleplayer `seed`. This is the
+    /// contract between the two halves; if the mod's emitter and this reader
+    /// ever drift, this fails.
+    #[test]
+    fn exporter_document_imports_fully() {
+        let json = r#"{
+            "format": "mc-locate-observations",
+            "version": 1,
+            "source": "mc-locate-exporter",
+            "seed": -4172144997902289642,
+            "minecraft_version": "26.2",
+            "bedrock": [
+                {"x": 10, "y": 4, "z": -20, "is_bedrock": true},
+                {"x": 14, "y": 4, "z": -20, "is_bedrock": false},
+                {"x": 10, "y": 123, "z": -20, "is_bedrock": true}
+            ],
+            "slime": [
+                {"chunk_x": 3, "chunk_z": -7, "is_slime": true}
+            ],
+            "structures": [
+                {"type": "bastion_remnant", "x": 128, "z": 256}
+            ],
+            "eye_throws": [
+                {"x": 12.5, "z": -40.25, "yaw": 41.7},
+                {"x": 900.0, "z": 100.0, "yaw": -12.0}
+            ],
+            "pillar_heights": [76, null, 82, null, null, 94, null, null, null, 103]
+        }"#;
+
+        let file: ObservationFile = serde_json::from_str(json).expect("mod document must parse");
+        assert_eq!(file.seed, Some(-4172144997902289642));
+
+        let mut session = Session::default();
+        let summary = file.apply_to_session(&mut session, false).unwrap();
+
+        assert_eq!(session.seed, Some(-4172144997902289642), "seed must be imported");
+        assert_eq!(session.bedrock.len(), 3);
+        assert_eq!(session.slime.len(), 1);
+        assert_eq!(session.structures.len(), 1);
+        assert_eq!(session.eye_throws.len(), 2);
+        assert!(session.pillar_heights.is_some());
+        assert_eq!(summary.duplicates, 0);
+    }
+}
+
+#[cfg(test)]
+mod exporter_structure_names {
+    /// The exact structure list the Fabric exporter offers in `/mclocate mark`.
+    /// Must stay identical to KNOWN_STRUCTURES in ExporterClient.java — every
+    /// name here must be one parse_structure accepts, or a marked structure is
+    /// silently dropped on import.
+    const EXPORTER_NAMES: &[&str] = &[
+        "village", "desert_pyramid", "jungle_temple", "swamp_hut", "igloo",
+        "ocean_ruin", "shipwreck", "ocean_monument", "woodland_mansion",
+        "pillager_outpost", "ruined_portal", "ancient_city", "buried_treasure",
+        "mineshaft", "trail_ruins", "trial_chambers", "nether_fortress",
+        "bastion_remnant", "ruined_portal_nether", "end_city", "end_gateway",
+    ];
+
+    #[test]
+    fn every_exporter_structure_name_parses() {
+        for n in EXPORTER_NAMES {
+            assert!(
+                crate::observations::parse_structure(n).is_ok(),
+                "exporter emits {n:?} but the CLI rejects it"
+            );
+        }
+    }
+}

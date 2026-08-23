@@ -1,5 +1,6 @@
 package dev.lao.mclocate.client;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
@@ -32,6 +33,7 @@ public final class AutoCollector {
 
 	private final Session session;
 	private final Config config;
+	private final Path outputDir;
 	private final EyeTracker eyes = new EyeTracker();
 
 	private int pillarRetriesLeft;
@@ -49,9 +51,15 @@ public final class AutoCollector {
 	private int sinceAnnounce;
 	private int collectedSinceAnnounce;
 
-	public AutoCollector(Session session, Config config) {
+	/** Persist the rolling session at most this often, in ticks (~15s). */
+	private static final int SAVE_INTERVAL = 300;
+	private int sinceSave;
+	private boolean wasInWorld;
+
+	public AutoCollector(Session session, Config config, Path outputDir) {
 		this.session = session;
 		this.config = config;
+		this.outputDir = outputDir;
 	}
 
 	public void register() {
@@ -62,6 +70,25 @@ public final class AutoCollector {
 			}
 		});
 		ClientTickEvents.END_CLIENT_TICK.register(client -> onTick(client));
+	}
+
+	/**
+	 * In singleplayer the client owns the integrated server, so the true seed is
+	 * right there — no cracking needed. Grabbing it also gives a way to check the
+	 * whole pipeline: collect in a known world, then confirm the CLI recovers it.
+	 */
+	private void captureSeed(Minecraft client) {
+		if (session.hasSeed() || !client.hasSingleplayerServer()) {
+			return;
+		}
+		var server = client.getSingleplayerServer();
+		if (server == null || server.overworld() == null) {
+			return;
+		}
+		long seed = server.overworld().getSeed();
+		if (session.setSeed(seed)) {
+			say(client, "§bmc-locate§r captured world seed §a" + seed + "§r (singleplayer).");
+		}
 	}
 
 	private void onLevelChange(Level level) {
@@ -125,8 +152,17 @@ public final class AutoCollector {
 
 	private void onTick(Minecraft client) {
 		if (client.level == null) {
+			if (wasInWorld) {
+				// Left the world (quit to menu / disconnect): flush once so a
+				// session is never lost to a forgotten export.
+				wasInWorld = false;
+				Persistence.save(outputDir, session);
+			}
 			return;
 		}
+		wasInWorld = true;
+		captureSeed(client);
+
 		ResourceKey<Level> dim = client.level.dimension();
 		if (!dim.equals(lastDimension)) {
 			lastDimension = dim;
@@ -143,6 +179,11 @@ public final class AutoCollector {
 		}
 		tickPillars(client);
 		tickAnnounce(client);
+
+		if (++sinceSave >= SAVE_INTERVAL) {
+			sinceSave = 0;
+			Persistence.save(outputDir, session);
+		}
 	}
 
 	private void tickPillars(Minecraft client) {

@@ -64,7 +64,10 @@ server — they only read what your client can already see.
 | `/mclocate auto on` / `off` | Turn passive collection on/off (see below). |
 | `/mclocate status` | Show what the session holds and how many seeds it's expected to leave standing. |
 | `/mclocate here` | Print your exact position, yaw, and dimension. |
-| `/mclocate mark <type>` | Record a structure at your current position. |
+| `/mclocate mark <type>` | Record a structure at your current position (21 types). |
+| `/mclocate seed` | Record the world seed. **Singleplayer only** — the client owns the seed there, so no cracking is needed. |
+| `/mclocate slime` / `slime not` | Mark the current chunk as a slime chunk / confirmed ordinary. Manual on purpose (see below). |
+| `/mclocate config` | Show settings, or `config <key> <value>` to change one in-game. |
 | `/mclocate export` | Write everything collected so far to a JSON file. |
 | `/mclocate clear` | Empty the current session. |
 
@@ -91,7 +94,24 @@ one — taken from the eye entity itself, which is exact where an F3 reading is
 eyeballed. Those feed the CLI's stronghold triangulation.
 
 Passive **bedrock** defaults to *off* (a mod shouldn't start logging your world
-uninvited); pillar and eye capture default to *on*.
+uninvited); pillar and eye capture default to *on*. In singleplayer, passive
+mode also grabs the **world seed** automatically — the client owns it there.
+
+### Your session survives restarts
+
+Everything collected is written continuously to
+`.minecraft/mc-locate/session-current.json` and flushed again when you leave the
+world, then reloaded on the next launch. A crash or a forgotten `export` no
+longer throws away an afternoon of collecting. `/mclocate clear` starts fresh.
+
+### About slime chunks
+
+Slime chunks are marked **by hand**, and that's deliberate. A single slime
+spawn is not proof a chunk is a slime chunk — swamps spawn them too — and a
+wrong "yes" eliminates the true seed, the one failure this whole tool is built
+to avoid. So confirm it yourself (a slime spawning below y=40, away from a
+swamp) and then `/mclocate slime`. Use `/mclocate slime not` for a chunk you're
+sure is ordinary.
 
 ## Config
 

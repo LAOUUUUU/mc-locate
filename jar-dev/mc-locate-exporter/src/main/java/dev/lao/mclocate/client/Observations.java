@@ -30,6 +30,7 @@ public final class Observations {
 	private final List<String> eyeThrows = new ArrayList<>();
 	private Integer[] pillarHeights;
 	private String minecraftVersion;
+	private Long seed;
 
 	public void addBedrock(int x, int y, int z, boolean isBedrock) {
 		bedrock.add(String.format(Locale.ROOT,
@@ -71,6 +72,11 @@ public final class Observations {
 		this.minecraftVersion = version;
 	}
 
+	/** The known world seed (singleplayer ground truth), if any. */
+	public void setSeed(Long seed) {
+		this.seed = seed;
+	}
+
 	public int bedrockCount() {
 		return bedrock.size();
 	}
@@ -93,7 +99,7 @@ public final class Observations {
 
 	public boolean isEmpty() {
 		return bedrock.isEmpty() && slime.isEmpty() && structures.isEmpty()
-				&& eyeThrows.isEmpty() && pillarHeights == null;
+				&& eyeThrows.isEmpty() && pillarHeights == null && seed == null;
 	}
 
 	public String toJson() {
@@ -102,6 +108,9 @@ public final class Observations {
 		sb.append("  \"version\": ").append(FORMAT_VERSION).append(",\n");
 		sb.append("  \"source\": \"mc-locate-exporter\"");
 
+		if (seed != null) {
+			sb.append(",\n  \"seed\": ").append(seed.toString());
+		}
 		if (minecraftVersion != null) {
 			// Escaped even though the value comes from the game, not the user:
 			// it is the only free-form string in the document.

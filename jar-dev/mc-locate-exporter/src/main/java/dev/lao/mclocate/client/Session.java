@@ -27,6 +27,7 @@ public final class Session {
 
 	private Integer[] pillarHeights;
 	private String minecraftVersion;
+	private Long seed;
 
 	/** Positions rejected because the session is already at its cap. */
 	private int dropped;
@@ -65,6 +66,17 @@ public final class Session {
 		this.minecraftVersion = v;
 	}
 
+	/** Records the ground-truth seed (singleplayer). Returns true if new. */
+	public synchronized boolean setSeed(long value) {
+		boolean isNew = seed == null || seed != value;
+		seed = value;
+		return isNew;
+	}
+
+	public synchronized boolean hasSeed() {
+		return seed != null;
+	}
+
 	public synchronized int bedrockCount() {
 		return bedrock.size();
 	}
@@ -91,7 +103,7 @@ public final class Session {
 
 	public synchronized boolean isEmpty() {
 		return bedrock.isEmpty() && slime.isEmpty() && structures.isEmpty()
-				&& throws_.isEmpty() && pillarHeights == null;
+				&& throws_.isEmpty() && pillarHeights == null && seed == null;
 	}
 
 	public synchronized void clear() {
@@ -100,6 +112,7 @@ public final class Session {
 		structures.clear();
 		throws_.clear();
 		pillarHeights = null;
+		seed = null;
 		dropped = 0;
 	}
 
@@ -139,6 +152,9 @@ public final class Session {
 		}
 		if (pillarHeights != null) {
 			obs.setPillarHeights(pillarHeights);
+		}
+		if (seed != null) {
+			obs.setSeed(seed);
 		}
 		return obs;
 	}
