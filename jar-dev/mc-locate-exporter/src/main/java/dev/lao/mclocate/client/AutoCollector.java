@@ -34,6 +34,7 @@ public final class AutoCollector {
 	private final Session session;
 	private final Config config;
 	private final Path outputDir;
+	private final SeedDatabase seeds;
 	private final EyeTracker eyes = new EyeTracker();
 
 	private int pillarRetriesLeft;
@@ -64,10 +65,14 @@ public final class AutoCollector {
 	private static final int STRUCT_INTERVAL = 40;
 	private int sinceStruct;
 
-	public AutoCollector(Session session, Config config, Path outputDir) {
+	/** Reset each time a world is left, so a known seed is flagged on every join. */
+	private boolean knownChecked;
+
+	public AutoCollector(Session session, Config config, Path outputDir, SeedDatabase seeds) {
 		this.session = session;
 		this.config = config;
 		this.outputDir = outputDir;
+		this.seeds = seeds;
 	}
 
 	public void register() {
@@ -78,6 +83,33 @@ public final class AutoCollector {
 			}
 		});
 		ClientTickEvents.END_CLIENT_TICK.register(client -> onTick(client));
+	}
+
+	/**
+	 * Flags, once per world, whether it is a seed in the known-seeds database —
+	 * by the real seed in singleplayer, by the biome hash on a server (which
+	 * identifies the seed without reading it).
+	 */
+	private void checkKnownSeed(Minecraft client) {
+		if (knownChecked) {
+			return;
+		}
+		SeedDatabase.Entry known;
+		if (client.hasSingleplayerServer()) {
+			var server = client.getSingleplayerServer();
+			if (server == null || server.overworld() == null) {
+				return;
+			}
+			known = seeds.identify(true, server.overworld().getSeed(), null);
+		} else {
+			long bz = client.level.getBiomeManager().biomeZoomSeed;
+			known = seeds.identify(false, 0L, bz);
+		}
+		knownChecked = true;
+		if (known != null) {
+			say(client, String.format(java.util.Locale.ROOT,
+					"§bmc-locate§r known seed: §a%s§r (%d)", known.name(), known.seed()));
+		}
 	}
 
 	/**
@@ -180,6 +212,7 @@ public final class AutoCollector {
 				// Left the world (quit to menu / disconnect): flush once so a
 				// session is never lost to a forgotten export.
 				wasInWorld = false;
+				knownChecked = false;
 				Persistence.save(outputDir, session);
 			}
 			return;
@@ -187,6 +220,7 @@ public final class AutoCollector {
 		wasInWorld = true;
 		captureSeed(client);
 		captureBiomeHash(client);
+		checkKnownSeed(client);
 		announceStructures(client);
 
 		ResourceKey<Level> dim = client.level.dimension();

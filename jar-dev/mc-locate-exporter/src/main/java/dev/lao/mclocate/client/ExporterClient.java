@@ -48,6 +48,7 @@ public class ExporterClient implements ClientModInitializer {
 
 	private final Session session = new Session();
 	private Config config;
+	private SeedDatabase seeds;
 
 	@Override
 	public void onInitializeClient() {
@@ -61,7 +62,8 @@ public class ExporterClient implements ClientModInitializer {
 			LOGGER.info("mc-locate: {}", restored);
 		}
 
-		new AutoCollector(session, config, dir).register();
+		seeds = SeedDatabase.load(dir);
+		new AutoCollector(session, config, dir, seeds).register();
 
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registry) -> {
 			LiteralArgumentBuilder<FabricClientCommandSource> root = literal("mclocate");
@@ -112,6 +114,13 @@ public class ExporterClient implements ClientModInitializer {
 					.executes(ctx -> scanStructures(ctx.getSource()))
 					.then(literal("verify")
 							.executes(ctx -> verifyStructures(ctx.getSource()))));
+
+			root.then(literal("known")
+					.executes(ctx -> listKnown(ctx.getSource()))
+					.then(literal("add")
+							.then(argument("name", StringArgumentType.greedyString())
+									.executes(ctx -> addKnown(ctx.getSource(),
+											StringArgumentType.getString(ctx, "name"))))));
 
 			// Slime chunks are recorded by hand: a single slime spawn is not
 			// proof (swamps spawn them too), so the player confirms it. `slime`
@@ -285,6 +294,38 @@ public class ExporterClient implements ClientModInitializer {
 		int z = (int) Math.floor(client.player.getZ());
 		session.addStructure(normalised, x, z);
 		feedback(source, "Marked §a" + normalised + "§r at " + x + ", " + z + ".");
+		return 1;
+	}
+
+	private int listKnown(FabricClientCommandSource source) {
+		var all = seeds.entries();
+		if (all.isEmpty()) {
+			feedback(source, "§7No known seeds yet. Add one with §e/mclocate known add <name>§7 "
+					+ "(singleplayer), or edit §emc-locate/known-seeds.json§7. You are then told "
+					+ "when you join that seed — even on a server, via its biome hash.");
+			return 1;
+		}
+		feedback(source, "§bKnown seeds§r (" + all.size() + "):");
+		for (SeedDatabase.Entry e : all) {
+			feedback(source, "  §a" + e.name() + "§r — " + e.seed());
+		}
+		return 1;
+	}
+
+	private int addKnown(FabricClientCommandSource source, String name) {
+		Minecraft client = Minecraft.getInstance();
+		if (!client.hasSingleplayerServer() || client.getSingleplayerServer() == null
+				|| client.getSingleplayerServer().overworld() == null) {
+			feedback(source, "§cAdding needs your own singleplayer world (to read the seed). "
+					+ "On a server, add the seed by editing mc-locate/known-seeds.json.");
+			return 0;
+		}
+		long seed = client.getSingleplayerServer().overworld().getSeed();
+		if (seeds.add(seed, name)) {
+			feedback(source, "Added §a" + name + "§r (" + seed + ") to the known seeds.");
+		} else {
+			feedback(source, "§7That seed (" + seed + ") is already known.");
+		}
 		return 1;
 	}
 
