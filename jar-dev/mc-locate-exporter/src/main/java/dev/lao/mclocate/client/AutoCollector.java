@@ -216,6 +216,7 @@ public final class AutoCollector {
 				// session is never lost to a forgotten export.
 				wasInWorld = false;
 				knownChecked = false;
+				Outlines.clear();
 				Persistence.save(outputDir, session);
 			}
 			return;
@@ -260,7 +261,8 @@ public final class AutoCollector {
 		if (!client.hasSingleplayerServer() || client.player == null || client.level == null) {
 			return;
 		}
-		if (!config.announceStructures) {
+		Outlines.enabled = config.outline;
+		if (!config.announceStructures && !config.outline) {
 			return;
 		}
 		if (++sinceStruct >= STRUCT_INTERVAL && !scanInFlight) {
@@ -269,6 +271,7 @@ public final class AutoCollector {
 			StructureReader.scan(session, result -> {
 				scanInFlight = false;
 				for (StructureReader.Found f : result.found()) {
+					Outlines.add(f.minX(), f.minY(), f.minZ(), f.maxX(), f.maxY(), f.maxZ());
 					if (config.announceStructures) {
 						say(client, String.format(java.util.Locale.ROOT,
 								"§bmc-locate§r found §a%s§r at %d, %d",

@@ -22,5 +22,8 @@
     "fabric-api": "*",
     "minecraft": "${minecraft}"
   },
-  "accessWidener": "mc-locate-exporter.accesswidener"
+  "accessWidener": "mc-locate-exporter.accesswidener",
+  "mixins": [
+    "mc-locate-exporter.mixins.json"
+  ]
 }

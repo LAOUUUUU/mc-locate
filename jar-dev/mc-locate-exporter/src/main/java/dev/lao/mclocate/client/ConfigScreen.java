@@ -46,6 +46,9 @@ public class ConfigScreen extends Screen {
         addRenderableWidget(toggle(x, y, w, h, "Announce structures",
                 () -> config.announceStructures, v -> config.announceStructures = v));
         y += gap;
+        addRenderableWidget(toggle(x, y, w, h, "Structure wireframe",
+                () -> config.outline, v -> config.outline = v));
+        y += gap;
         addRenderableWidget(toggle(x, y, w, h, "Announce collection",
                 () -> config.announce, v -> config.announce = v));
         y += gap;
