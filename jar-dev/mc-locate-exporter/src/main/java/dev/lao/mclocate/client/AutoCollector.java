@@ -69,6 +69,8 @@ public final class AutoCollector {
 	private static final int OUTLINE_INTERVAL = 8;
 	private int sinceOutline;
 	private final StructureHighlighter highlighter = new StructureHighlighter();
+	/** True while an async structure scan is running, so ticks do not stack them. */
+	private boolean scanInFlight;
 
 	/** Reset each time a world is left, so a known seed is flagged on every join. */
 	private boolean knownChecked;
@@ -266,17 +268,20 @@ public final class AutoCollector {
 		if (!config.announceStructures && !config.outline) {
 			return;
 		}
-		if (++sinceStruct >= STRUCT_INTERVAL) {
+		if (++sinceStruct >= STRUCT_INTERVAL && !scanInFlight) {
 			sinceStruct = 0;
-			StructureReader.Result r = StructureReader.scan(session);
-			for (StructureReader.Found f : r.found()) {
-				highlighter.add(f);
-				if (config.announceStructures) {
-					say(client, String.format(java.util.Locale.ROOT,
-							"§bmc-locate§r found §a%s§r at %d, %d — outlined in the world",
-							f.type(), f.x(), f.z()));
+			scanInFlight = true;
+			StructureReader.scan(session, result -> {
+				scanInFlight = false;
+				for (StructureReader.Found f : result.found()) {
+					highlighter.add(f);
+					if (config.announceStructures) {
+						say(client, String.format(java.util.Locale.ROOT,
+								"§bmc-locate§r found §a%s§r at %d, %d — outlined in the world",
+								f.type(), f.x(), f.z()));
+					}
 				}
-			}
+			});
 		}
 		if (config.outline && ++sinceOutline >= OUTLINE_INTERVAL) {
 			sinceOutline = 0;

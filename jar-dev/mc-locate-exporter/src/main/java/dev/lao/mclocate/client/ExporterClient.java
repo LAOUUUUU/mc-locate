@@ -333,38 +333,40 @@ public class ExporterClient implements ClientModInitializer {
 	}
 
 	private int verifyStructures(FabricClientCommandSource source) {
-		java.util.List<String> rows = StructureReader.verify();
-		if (rows.isEmpty()) {
-			feedback(source, "§7No structures in range to calibrate against — explore toward one.");
-			return 1;
-		}
-		feedback(source, "§bmc-locate structure calibration§r (singleplayer oracle):");
-		for (String row : rows) {
-			feedback(source, "  " + row);
-		}
-		feedback(source, "§7These rows establish the origin/bounding-box relationship a "
-				+ "server-side detector will need. Share them if a detector misbehaves.");
+		StructureReader.verify(rows -> {
+			if (rows.isEmpty()) {
+				feedback(source, "§7No structures in range to calibrate against — explore toward one.");
+				return;
+			}
+			feedback(source, "§bmc-locate structure calibration§r (singleplayer oracle):");
+			for (String row : rows) {
+				feedback(source, "  " + row);
+			}
+			feedback(source, "§7These rows establish the origin/bounding-box relationship a "
+					+ "server-side detector will need. Share them if a detector misbehaves.");
+		});
 		return 1;
 	}
 
 	private int scanStructures(FabricClientCommandSource source) {
-		StructureReader.Result r = StructureReader.scan(session);
-		if (r.serverUnsupported()) {
-			feedback(source, "§cStructure reading needs your own singleplayer world — a server "
-					+ "does not send structure positions to the client. (Bedrock, pillars and eye "
-					+ "throws still work on servers.)");
-			return 0;
-		}
-		if (r.added() == 0) {
-			feedback(source, "§7No new structures in the loaded chunks around you. "
-					+ "Explore toward one and run this again.");
-			return 1;
-		}
-		for (StructureReader.Found f : r.found()) {
-			feedback(source, "  §afound§r " + f.type() + " at " + f.x() + ", " + f.z());
-		}
-		feedback(source, "Recorded §a" + r.added() + "§r structure(s); §a"
-				+ session.structureCount() + "§r in session.");
+		StructureReader.scan(session, r -> {
+			if (r.serverUnsupported()) {
+				feedback(source, "§cStructure reading needs your own singleplayer world — a server "
+						+ "does not send structure positions to the client. (Bedrock, pillars and eye "
+						+ "throws still work on servers.)");
+				return;
+			}
+			if (r.added() == 0) {
+				feedback(source, "§7No new structures in the loaded chunks around you. "
+						+ "Explore toward one and run this again.");
+				return;
+			}
+			for (StructureReader.Found f : r.found()) {
+				feedback(source, "  §afound§r " + f.type() + " at " + f.x() + ", " + f.z());
+			}
+			feedback(source, "Recorded §a" + r.added() + "§r structure(s); §a"
+					+ session.structureCount() + "§r in session.");
+		});
 		return 1;
 	}
 
