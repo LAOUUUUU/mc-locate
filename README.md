@@ -39,7 +39,7 @@ enough to collapse the space to a single seed.
 
 |  |  |
 |---|---|
-| **14 modes** | seed cracking, coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
+| **15 modes** | seed cracking (incl. decorator/population-seed), coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
 | **212 tests** | every RNG formula checked against an independent source, not from memory |
 | **34 versions** | Beta 1.7 through 26.2 — current Minecraft |
 | **3 platforms** | one universal macOS binary, Linux x86_64, Windows x86_64 |
@@ -143,8 +143,9 @@ type it once.
 | 10 | Stronghold Ring Triangulator | Player X/Z and yaw per eye-of-ender throw | Throw an eye, then F3 + C and read position and `Facing` |
 | 11 | Nether ↔ Overworld Portal Converter | One coordinate and its dimension | Anywhere. Pure arithmetic, no search |
 | 12 | Observation Advisor | Whatever you already have | Nothing new — it tells you what to go and look at next, and explains why a candidate survives |
-| 13 | Session & Observations | A saved file, or a screenshots folder | Save/load your work; watch your screenshots folder and read new ones as you press F2 |
+| 13 | Session & Observations | A saved file, a screenshots folder, or the exporter mod's folder | Save/load your work; live-auto-import the mod's exports; watch your screenshots folder and read new ones as you press F2 |
 | 14 | Documentation | Nothing | The full write-up for every mode, offline, inside the binary |
+| 15 | Decorator / Population-Seed Crack | A decorated feature (ore, plant, dungeon) at a known chunk, plus a candidate list | Recover the chunk's population seed and filter the pillars' 2³² candidates to one. See below |
 
 ### Mode 9: three routes to a seed
 
@@ -287,13 +288,15 @@ Stated plainly rather than papered over:
   A full sweep needs the layered filter tree from Nether_Bedrock_Cracker. What
   is here is exact verification that composes with mode 9's pillar shortcut,
   which is the path that actually finishes.
-- **The lattice reverser is not yet wired to a live dungeon.** Recovering a
-  world seed from a dungeon needs one more step after the decorator seed:
-  inverting `setPopulationSeed`, where
-  `populationSeed = (blockX·a + blockZ·b) ^ worldSeed` with `a` and `b`
-  themselves derived from the world seed. That is its own algorithm
-  (mjtb49's `ChunkRandomReverser`) and is not implemented. The reverser itself
-  is complete and tested against dungeon-shaped queries.
+- **The decorator crack narrows a candidate list; it is not yet a standalone
+  cracker.** Mode 15 wires the lattice reverser to a dungeon (spawner position +
+  floor), recovers the decorator seed, and undoes the salt to the chunk's
+  population seed — all verified end to end. It then *filters* an existing
+  candidate list (the End pillars' 2³², most usefully), which is what finishes.
+  What is still not implemented is inverting `setPopulationSeed` standalone —
+  `populationSeed = (blockX·a + blockZ·b) ^ worldSeed`, with `a`, `b` derived
+  from the seed — to recover structure seeds from a population seed with no
+  candidate list. That is its own algorithm (mjtb49's `ChunkRandomReverser`).
 - **Mode 10 is a simpler model than Ninjabrain-Bot.** It does model the
   "eye points at the nearest stronghold" constraint, which matters — without it
   a far stronghold that happens to sit along the same bearing can take a third
@@ -395,6 +398,26 @@ Plus an overview of how the modes chain and a glossary.
 
 The mode list, the menu and the docs all read one registry, so a mode cannot be
 added without documentation: [a test enforces it](src/modes.rs).
+
+### Mode 15: cracking from a decorated feature
+
+Every feature a chunk decorates itself with — an ore vein, a plant, a dungeon —
+is placed by an RNG seeded from the chunk's *population seed*, a fixed function
+of the world seed and the chunk. So a feature the server has shown your client
+leaks the seed. The maths are transcribed from SeedFinding's canonical
+`mc_core_java`, not guessed: `populationSeed = (blockX·a + blockZ·b) ^ worldSeed`
+masked to 48 bits, then `decoratorSeed = populationSeed + index + 10000·step`.
+
+The mode recovers the population seed — directly, from a decorator seed plus its
+salt, or from a dungeon (spawner position + 7×7 floor) via the lattice reverser —
+and then filters the session's candidate seeds. Because a population seed is 48
+bits, one feature collapses the End pillars' 2³² candidates to a single seed. The
+salt (`index + 10000·step`) is your input, never a hardcoded biome table: the
+index shifts between versions, and a wrong salt would silently drop the true
+seed. The full chain is round-trip tested through the real RNG and lattice.
+
+The [exporter mod](jar-dev/mc-locate-exporter/) can be published to Modrinth and
+CurseForge automatically — see its [PUBLISHING.md](jar-dev/mc-locate-exporter/PUBLISHING.md).
 
 ## The interface
 
