@@ -438,40 +438,51 @@ mod tests {
     }
 
     #[test]
-    fn json_files_sees_new_and_grown_files() {
+    fn json_files_tracks_only_json_and_reports_mtime() {
         use std::time::{Duration, SystemTime};
-        let dir = std::env::temp_dir().join("mc-locate-obs-watch-test");
+        // A unique dir per run so parallel test processes never collide.
+        let dir = std::env::temp_dir().join(format!(
+            "mc-locate-obs-watch-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("a.json"), b"{}").unwrap();
         std::fs::write(dir.join("b.txt"), b"x").unwrap();
 
-        let first = json_files(&dir);
-        assert_eq!(first.len(), 1, "only the .json is tracked");
+        let listed = json_files(&dir);
+        assert_eq!(listed.len(), 1, "only the .json is tracked");
         let a = dir.join("a.json");
-        assert!(first.contains_key(&a));
+        assert!(listed.contains_key(&a));
 
-        // Rewriting a.json must bump its mtime so the watcher re-reads it.
-        // Some filesystems have coarse mtime resolution, so force it forward.
-        std::fs::write(&a, b"{\"seed\": 1}").unwrap();
-        let bumped = SystemTime::now() + Duration::from_secs(2);
-        filetime_set(&a, bumped);
-        let second = json_files(&dir);
-        assert!(second[&a] > first[&a], "a grown file must show a newer mtime");
+        // Set an explicit, definitely-newer mtime rather than relying on the
+        // wall clock advancing between two writes — that is coarse on some
+        // filesystems and made this test flaky in CI. std's set_modified writes
+        // the timestamp directly, so the comparison is deterministic.
+        let early = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let later = early + Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&a)
+            .unwrap()
+            .set_modified(early)
+            .unwrap();
+        let before = json_files(&dir);
+
+        std::fs::File::options()
+            .write(true)
+            .open(&a)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+        let after = json_files(&dir);
+
+        assert!(
+            after[&a] > before[&a],
+            "a file whose mtime advanced must read as newer"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// Sets a file's mtime without pulling in a crate, by writing then relying on
-    /// the OS clock; falls back to a no-op if unsupported.
-    fn filetime_set(path: &std::path::Path, _when: std::time::SystemTime) {
-        // Touch by reopening for append; on the CI filesystems this advances
-        // mtime past the previous write recorded above.
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(path) {
-            let _ = f.write_all(b" ");
-            let _ = f.flush();
-        }
     }
 
     #[test]
