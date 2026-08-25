@@ -100,8 +100,14 @@ lift needs, straight from the game. This validates the whole cracker end to end
 oracle for Phase 2. On a server the client receives no structure starts, so this
 is honestly singleplayer-only; it is not faked there.
 
-▶ *Phase 2 — client-only detection on servers (still to do).* The remaining,
-hardest work below.
+▶ *Phase 2 — client-only detection on servers (in progress).* Started with the
+calibration step: `/mclocate structures verify` (singleplayer) reports, for each
+structure the integrated server knows, its exact origin chunk and the block
+offset to its bounding box — establishing the origin/bounding-box relationship a
+server-side block detector must rely on, empirically rather than by a guessed
+constant. The remaining work is detecting that bounding box from the client's
+rendered blocks per structure, which needs in-game calibration runs to confirm
+before it can be trusted (a wrong origin silently kills the crack). Detail below.
 
 This is what turns the tool from "type coordinates" into SCX's "run around and it
 cracks itself," and it is the hardest engineering here — the maths are done, this

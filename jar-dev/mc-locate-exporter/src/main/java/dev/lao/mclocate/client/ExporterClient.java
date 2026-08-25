@@ -109,7 +109,9 @@ public class ExporterClient implements ClientModInitializer {
 					.executes(ctx -> captureSeed(ctx.getSource())));
 
 			root.then(literal("structures")
-					.executes(ctx -> scanStructures(ctx.getSource())));
+					.executes(ctx -> scanStructures(ctx.getSource()))
+					.then(literal("verify")
+							.executes(ctx -> verifyStructures(ctx.getSource()))));
 
 			// Slime chunks are recorded by hand: a single slime spawn is not
 			// proof (swamps spawn them too), so the player confirms it. `slime`
@@ -283,6 +285,21 @@ public class ExporterClient implements ClientModInitializer {
 		int z = (int) Math.floor(client.player.getZ());
 		session.addStructure(normalised, x, z);
 		feedback(source, "Marked §a" + normalised + "§r at " + x + ", " + z + ".");
+		return 1;
+	}
+
+	private int verifyStructures(FabricClientCommandSource source) {
+		java.util.List<String> rows = StructureReader.verify();
+		if (rows.isEmpty()) {
+			feedback(source, "§7No structures in range to calibrate against — explore toward one.");
+			return 1;
+		}
+		feedback(source, "§bmc-locate structure calibration§r (singleplayer oracle):");
+		for (String row : rows) {
+			feedback(source, "  " + row);
+		}
+		feedback(source, "§7These rows establish the origin/bounding-box relationship a "
+				+ "server-side detector will need. Share them if a detector misbehaves.");
 		return 1;
 	}
 
