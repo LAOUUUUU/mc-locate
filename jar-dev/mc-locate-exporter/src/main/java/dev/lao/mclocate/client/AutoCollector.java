@@ -65,10 +65,6 @@ public final class AutoCollector {
 	private static final int STRUCT_INTERVAL = 40;
 	private int sinceStruct;
 
-	/** Re-emit the structure outline particles this often; they fade fast. */
-	private static final int OUTLINE_INTERVAL = 8;
-	private int sinceOutline;
-	private final StructureHighlighter highlighter = new StructureHighlighter();
 	/** True while an async structure scan is running, so ticks do not stack them. */
 	private boolean scanInFlight;
 
@@ -220,7 +216,6 @@ public final class AutoCollector {
 				// session is never lost to a forgotten export.
 				wasInWorld = false;
 				knownChecked = false;
-				highlighter.clear();
 				Persistence.save(outputDir, session);
 			}
 			return;
@@ -265,7 +260,7 @@ public final class AutoCollector {
 		if (!client.hasSingleplayerServer() || client.player == null || client.level == null) {
 			return;
 		}
-		if (!config.announceStructures && !config.outline) {
+		if (!config.announceStructures) {
 			return;
 		}
 		if (++sinceStruct >= STRUCT_INTERVAL && !scanInFlight) {
@@ -274,19 +269,13 @@ public final class AutoCollector {
 			StructureReader.scan(session, result -> {
 				scanInFlight = false;
 				for (StructureReader.Found f : result.found()) {
-					highlighter.add(f);
 					if (config.announceStructures) {
 						say(client, String.format(java.util.Locale.ROOT,
-								"§bmc-locate§r found §a%s§r at %d, %d — outlined in the world",
+								"§bmc-locate§r found §a%s§r at %d, %d",
 								f.type(), f.x(), f.z()));
 					}
 				}
 			});
-		}
-		if (config.outline && ++sinceOutline >= OUTLINE_INTERVAL) {
-			sinceOutline = 0;
-			highlighter.render(client.level,
-					client.player.getX(), client.player.getY(), client.player.getZ());
 		}
 	}
 

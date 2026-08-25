@@ -39,8 +39,6 @@ public final class Config {
 	/** Announce structures as they load (singleplayer). */
 	public boolean announceStructures = true;
 
-	/** Draw a particle outline around found structures. */
-	public boolean outline = true;
 
 	private Path file;
 
@@ -67,7 +65,6 @@ public final class Config {
 		cfg.announce = readBool(p, "announce", cfg.announce);
 		cfg.hud = readBool(p, "hud", cfg.hud);
 		cfg.announceStructures = readBool(p, "announceStructures", cfg.announceStructures);
-		cfg.outline = readBool(p, "outline", cfg.outline);
 		return cfg;
 	}
 
@@ -84,7 +81,6 @@ public final class Config {
 		p.setProperty("announce", Boolean.toString(announce));
 		p.setProperty("hud", Boolean.toString(hud));
 		p.setProperty("announceStructures", Boolean.toString(announceStructures));
-		p.setProperty("outline", Boolean.toString(outline));
 
 		try {
 			Files.createDirectories(file.getParent());

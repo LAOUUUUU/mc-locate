@@ -66,7 +66,7 @@ server — they only read what your client can already see.
 | `/mclocate here` | Print your exact position, yaw, and dimension. |
 | `/mclocate mark <type>` | Record a structure at your current position (21 types). |
 | `/mclocate seed` | Record the world seed. **Singleplayer only** — the client owns the seed there, so no cracking is needed. |
-| `/mclocate structures` | Record nearby structures at their exact origins. Announced automatically and **outlined with particles** in the world as you explore. **Singleplayer only.** |
+| `/mclocate structures` | Record nearby structures at their exact origins, announced with coordinates automatically as you explore. **Singleplayer only.** |
 | `/mclocate known` | List your known-seed database; `known add <name>` saves the current seed. You're told when you join a known seed — even on a server, via its biome hash. |
 | `/mclocate gui` | Open a settings screen (toggles for all the auto/announce options). |
 | `/mclocate slime` / `slime not` | Mark the current chunk as a slime chunk / confirmed ordinary. Manual on purpose (see below). |

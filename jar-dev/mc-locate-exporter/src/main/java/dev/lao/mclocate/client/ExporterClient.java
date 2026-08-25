@@ -409,7 +409,7 @@ public class ExporterClient implements ClientModInitializer {
 			//? if >=26.2 {
 			client.setScreenAndShow(new ConfigScreen(cfg));
 			//?} else
-			/*client.setScreen(new ConfigScreen(cfg));*/
+			//client.setScreen(new ConfigScreen(cfg));
 		});
 		feedback(source, "Opening the mc-locate settings…");
 		return 1;
@@ -426,7 +426,7 @@ public class ExporterClient implements ClientModInitializer {
 		//? if >=26.2 {
 		net.minecraft.client.Screenshot.grab(client, false);
 		//?} else
-		/*net.minecraft.client.Screenshot.grab(client.gameDirectory, client.getMainRenderTarget(), msg -> {});*/
+		//net.minecraft.client.Screenshot.grab(client.gameDirectory, client.getMainRenderTarget(), msg -> {});
 		feedback(source, "Screenshot saved to the §escreenshots§r folder — the CLI's screenshot watcher can OCR it.");
 		return 1;
 	}
