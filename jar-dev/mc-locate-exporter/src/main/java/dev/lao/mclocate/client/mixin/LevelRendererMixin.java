@@ -43,16 +43,28 @@ public class LevelRendererMixin {
 
         net.minecraft.client.renderer.MultiBufferSource.BufferSource buffers =
                 this.renderBuffers.bufferSource();
+        // Draw each box twice: lines() gives the crisp edges you can see, and
+        // secondaryBlockOutline() is vanilla's "show the outline through blocks"
+        // type — together the whole box is visible even behind terrain. Depth
+        // testing is baked into each render type in the new pipeline, so there is
+        // no global toggle; two passes is how vanilla does it.
         com.mojang.blaze3d.vertex.VertexConsumer lines =
                 buffers.getBuffer(net.minecraft.client.renderer.rendertype.RenderTypes.lines());
+        com.mojang.blaze3d.vertex.VertexConsumer through =
+                buffers.getBuffer(net.minecraft.client.renderer.rendertype.RenderTypes.secondaryBlockOutline());
 
         for (int[] b : boxes) {
             net.minecraft.world.phys.shapes.VoxelShape shape =
                     net.minecraft.world.phys.shapes.Shapes.create(new net.minecraft.world.phys.AABB(
                             b[0], b[1], b[2], b[3] + 1, b[4] + 1, b[5] + 1));
+            int color = b.length > 6 ? b[6] : 0xFF33FF66;
+            int dim = (color & 0x00FFFFFF) | 0x80000000;
             net.minecraft.client.renderer.ShapeRenderer.renderShape(
-                    pose, lines, shape, -camPos.x, -camPos.y, -camPos.z, 0xFF33FF66, 1.0F);
+                    pose, through, shape, -camPos.x, -camPos.y, -camPos.z, dim, 1.0F);
+            net.minecraft.client.renderer.ShapeRenderer.renderShape(
+                    pose, lines, shape, -camPos.x, -camPos.y, -camPos.z, color, 1.0F);
         }
+        buffers.endBatch(net.minecraft.client.renderer.rendertype.RenderTypes.secondaryBlockOutline());
         buffers.endBatch(net.minecraft.client.renderer.rendertype.RenderTypes.lines());
     }
     *///?}

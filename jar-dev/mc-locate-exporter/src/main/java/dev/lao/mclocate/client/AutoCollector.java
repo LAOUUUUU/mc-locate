@@ -257,6 +257,29 @@ public final class AutoCollector {
 	 * reach one, and records it for the crack. A server sends no structure starts,
 	 * so this is silent there rather than guessing.
 	 */
+	/**
+	 * Outline colour by how useful a structure is for cracking: green best
+	 * (high-bit liftable features), yellow decent, purple weak (large
+	 * structures), red lowest. A usefulness heuristic, not a hard rule.
+	 */
+	private static int outlineColor(String type) {
+		if (type.equals("desert_pyramid") || type.equals("jungle_pyramid")
+				|| type.equals("jungle_temple") || type.equals("swamp_hut") || type.equals("igloo")
+				|| type.startsWith("shipwreck") || type.equals("pillager_outpost")) {
+			return 0xFF33FF66; // green
+		}
+		if (type.equals("village") || type.startsWith("ocean_ruin") || type.equals("ruined_portal")
+				|| type.equals("ancient_city") || type.equals("trail_ruins")
+				|| type.equals("trial_chambers") || type.equals("fortress")
+				|| type.equals("bastion_remnant") || type.equals("buried_treasure")) {
+			return 0xFFFFD633; // yellow
+		}
+		if (type.equals("monument") || type.equals("mansion") || type.equals("end_city")) {
+			return 0xFFB366FF; // purple
+		}
+		return 0xFFFF4D4D; // red
+	}
+
 	private void trackStructures(Minecraft client) {
 		if (!client.hasSingleplayerServer() || client.player == null || client.level == null) {
 			return;
@@ -271,11 +294,12 @@ public final class AutoCollector {
 			StructureReader.scan(session, result -> {
 				scanInFlight = false;
 				for (StructureReader.Found f : result.found()) {
-					Outlines.add(f.minX(), f.minY(), f.minZ(), f.maxX(), f.maxY(), f.maxZ());
+					Outlines.add(f.minX(), f.minY(), f.minZ(), f.maxX(), f.maxY(), f.maxZ(),
+							outlineColor(f.type()));
 					if (config.announceStructures) {
 						say(client, String.format(java.util.Locale.ROOT,
-								"§bmc-locate§r found §a%s§r at %d, %d",
-								f.type(), f.x(), f.z()));
+								"§bmc-locate§r found §a%s§r at %d, %d, %d",
+								f.type(), f.x(), f.minY(), f.z()));
 					}
 				}
 			});

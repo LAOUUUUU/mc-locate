@@ -22,8 +22,8 @@ public final class Outlines {
     /** Whether to draw outlines at all (mirrors the config flag). */
     public static volatile boolean enabled = true;
 
-    /** {minX,minY,minZ,maxX,maxY,maxZ}, max inclusive. */
-    public static void add(int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
+    /** {minX,minY,minZ,maxX,maxY,maxZ,colorARGB}, max inclusive. */
+    public static void add(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, int color) {
         synchronized (BOXES) {
             for (int[] b : BOXES) {
                 if (b[0] == minX && b[2] == minZ) {
@@ -33,7 +33,7 @@ public final class Outlines {
             if (BOXES.size() >= MAX) {
                 BOXES.remove(0);
             }
-            BOXES.add(new int[] { minX, minY, minZ, maxX, maxY, maxZ });
+            BOXES.add(new int[] { minX, minY, minZ, maxX, maxY, maxZ, color });
         }
     }
 
