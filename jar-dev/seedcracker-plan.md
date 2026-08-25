@@ -80,24 +80,60 @@ rule that has already caught real bugs.
 - Outcome (now real): structure coordinates + the hashed seed → one world seed,
   entirely in the CLI, verified three ways.
 
-**Tier 2 — Live structure capture in the mod.**
-- Detect a structure's origin from loaded chunks (start piece / bounding box),
-  read its liftable position, export it. Reuses the export/watch loop already
-  built, so the CLI cracks as you explore — SCX's headline experience, but with
-  our engine behind it and on 26.x.
-- Read the **hashed seed** off the client connection and export it too.
+**Tier 2 — Read the hashed seed off the connection.**
+- Small but high-value: on a server the client receives the hashed seed in the
+  login packet. Read it in the mod and export it, so the Tier-1 engine can pin
+  the exact world seed automatically. Pairs with manually-typed structure coords
+  today and with Tier 3 tomorrow. (Verify the read against a known singleplayer
+  world: `hashseed::hashed_seed(realSeed)` must equal the value the client got.)
 
-**Tier 3 — Nether & more decorators.**
+**Tier 3 — Reading structures in-game (the headline feature).**
+
+This is what turns the tool from "type coordinates" into SCX's "run around and it
+cracks itself," and it is the hardest engineering here — the maths are done, this
+is detection. The Tier-1 lift needs a structure's **exact origin chunk** (the
+chunk-aligned corner cubiomes reports); one wrong chunk silently kills the seed,
+so detection has to be exact, not approximate.
+
+- **Per-structure detectors.** The client only has the blocks in its loaded
+  chunks, so each structure needs a routine that recognises it from its blocks
+  and derives its origin chunk. Start with the small fixed-layout *features*,
+  which are the most reliable and are exactly the liftable ones Tier 1 already
+  cracks:
+  - Desert pyramid — orange/blue terracotta pattern over the hidden TNT room; the
+    center maps to a fixed offset from the origin chunk.
+  - Igloo — snow-block dome + (sometimes) the basement ladder.
+  - Jungle temple — mossy/cobblestone box with levers and the tripwire corridor.
+  - Swamp hut — the raised cauldron + crafting-table + mushroom footprint.
+  - Shipwreck, Pillager outpost — larger but distinctive.
+- **Origin, not "somewhere near."** For each detector, find one unambiguous
+  anchor block, then compute the structure's start chunk from the known layout
+  offset for that version. Refuse (don't guess) when the loaded chunks don't
+  contain enough of the structure to fix the anchor.
+- **Free correctness oracle.** In a singleplayer world the mod knows the real
+  seed, and cubiomes knows where every structure generates for that seed. So a
+  detector can be validated automatically: detect the structure, compare the
+  origin it computed to cubiomes' `getStructurePos` — they must match to the
+  chunk. This is a real regression test for every detector, on real worlds.
+- **Export + crack.** Feed `{type, originX, originZ}` through the existing export
+  → watch → lift loop, alongside the Tier-2 hashed seed, and the CLI returns the
+  world seed while you explore — on 26.x, which SCX cannot do.
+- **Borrow (MIT, verify):** SCX's per-structure finders are the reference for the
+  anchor blocks and offsets; re-derive each against the actual structure NBT /
+  cubiomes rather than copying, and version-gate with Stonecutter since layouts
+  shift between versions.
+
+**Tier 4 — Nether & more decorators.**
 - Port the layered-filter full bedrock crack (not just ranged brute force).
 - Add the decorators SCX left broken, each re-derived and verified for current
   versions (this is where "more up to date than SCX" is won).
 
-**Tier 4 — Coverage parity across versions.**
+**Tier 5 — Coverage parity across versions.**
 - Ensure every source works 1.21 → 26.2 (cubiomes fork already reaches 26.2).
 - Verified biome filters where they genuinely help (SCX's biome path is one of
   its "gives wrong data" features — only ship ours once tested).
 
-**Tier 5 — Polish.**
+**Tier 6 — Polish.**
 - In-game bit accounting / HUD (how close am I), a data view, and docs.
 
 ## Honest risks and limits
@@ -112,10 +148,10 @@ rule that has already caught real bugs.
 - **We can't out-crack physics** — if the server never sends the leak, there is
   nothing to reverse.
 
-## First concrete step
+## Next concrete step
 
-Tier 1's hashed-seed disambiguation, because it multiplies the value of every
-source we already have: today a structure/pillar/bedrock crack leaves 65 536
-world seeds; the hashed seed picks the one. It is small, self-contained, and
-verifiable against any known world. Everything else in Tier 1 builds on the
-lift + sieve that already exist.
+Tier 1 is done. The next step is **Tier 2 — read the hashed seed off the
+connection** in the exporter mod: it is small, self-contained, and it makes the
+whole Tier-1 engine usable on a server without typing anything, since the hashed
+seed pins the exact world seed from whatever structure/pillar/bedrock candidates
+you have. Tier 3 (reading structures) then removes the last manual step.
