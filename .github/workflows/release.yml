@@ -109,8 +109,46 @@ jobs:
           name: mc-locate-${{ matrix.label }}
           path: mc-locate-${{ matrix.label }}.*
 
+  # The exporter mod ships alongside the CLI so the "grab the jar for your
+  # version" table in its README is actually actionable — one jar per supported
+  # Minecraft version, built from the same tag.
+  mod:
+    name: exporter mod jars
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jar-dev/mc-locate-exporter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+      - name: Cache Gradle & Loom
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-mod-${{ hashFiles('jar-dev/mc-locate-exporter/**/*.gradle.kts', 'jar-dev/mc-locate-exporter/**/*.toml', 'jar-dev/mc-locate-exporter/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-mod-
+      - run: ./gradlew build --no-daemon --console=plain --stacktrace
+      - name: Collect version jars
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/artifacts"
+          find versions -path '*/build/libs/*.jar' ! -name '*-sources.jar' \
+            -exec cp {} "${GITHUB_WORKSPACE}/artifacts/" \;
+          ls -la "${GITHUB_WORKSPACE}/artifacts"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mod-jars
+          path: artifacts/*.jar
+          if-no-files-found: error
+
   publish:
-    needs: build
+    needs: [build, mod]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -127,5 +165,5 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             --title "mc-locate ${GITHUB_REF_NAME}" \
-            --notes "Prebuilt binaries for macOS (Apple Silicon and Intel), Linux x86_64 and Windows x86_64. See README.md for what each mode needs." \
-            artifacts/*.tar.gz artifacts/*.zip
+            --notes "Prebuilt CLI binaries for macOS (Apple Silicon and Intel), Linux x86_64 and Windows x86_64, plus the Fabric exporter mod for every supported Minecraft version (1.21-1.21.11, 26.1.x, 26.2). See README.md for the CLI, and jar-dev/mc-locate-exporter/README.md for which mod jar to grab." \
+            artifacts/*.tar.gz artifacts/*.zip artifacts/*.jar

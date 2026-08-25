@@ -1,0 +1,62 @@
+name: Mod
+
+# The exporter mod is a separate Stonecutter build from the Rust CLI, so it has
+# its own workflow, gated on the mod's files. A CLI-only change should not spend
+# minutes downloading fourteen Minecraft versions.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "jar-dev/mc-locate-exporter/**"
+      - ".github/workflows/mod.yml"
+  pull_request:
+    paths:
+      - "jar-dev/mc-locate-exporter/**"
+      - ".github/workflows/mod.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build all versions
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jar-dev/mc-locate-exporter
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gradle itself runs on 21; the per-version compile toolchains (21 for
+      # 1.21.x, 25 for 26.x) are picked from these installs by Gradle's
+      # toolchain auto-detection, so nothing has to be downloaded at build time.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      # The Loom cache holds fourteen remapped Minecraft versions, so caching it
+      # turns a multi-minute cold build into a fast one on unchanged deps.
+      - name: Cache Gradle & Loom
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-mod-${{ hashFiles('jar-dev/mc-locate-exporter/**/*.gradle.kts', 'jar-dev/mc-locate-exporter/**/*.toml', 'jar-dev/mc-locate-exporter/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-mod-
+
+      - run: ./gradlew build --no-daemon --console=plain --stacktrace
+
+      - name: Collect version jars
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/mod-dist"
+          find versions -path '*/build/libs/*.jar' ! -name '*-sources.jar' \
+            -exec cp {} "${GITHUB_WORKSPACE}/mod-dist/" \;
+          ls -la "${GITHUB_WORKSPACE}/mod-dist"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mod-jars
+          path: mod-dist/*.jar
+          if-no-files-found: error
