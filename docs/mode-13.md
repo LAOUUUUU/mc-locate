@@ -37,6 +37,17 @@ menu labels (`Desert pyramid`), in any case, with spaces or underscores.
 you fly the Nether, a script, a hand-written file — anything that writes this
 JSON feeds mc-locate, and the producer never needs to know any of the maths.
 
+## Watching the exporter mod's folder (live)
+
+The exporter mod writes its observations to `<gameDir>/mc-locate`. Point this
+watcher at that folder and every file the mod writes is imported the moment it
+appears — no copy-paste. The mod keeps a single rolling `session-current.json`
+that grows as you play, and the watcher re-reads it whenever it changes, so the
+CLI stays in sync with the game in real time: fly the Nether, watch the
+candidate count fall here. Existing files in the folder are imported once on
+entry, since a file already sitting there is data you want, not history to skip.
+Every import is deduplicated, so re-reading the rolling file costs nothing.
+
 ## Watching a screenshots folder
 
 Minecraft cannot be made to press F2 for you, and driving its window from

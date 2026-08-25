@@ -25,9 +25,9 @@
 //! existing pile of screenshots is not re-read every session.
 
 use anyhow::{Result, bail};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::observations::ObservationFile;
 use crate::session::Session;
@@ -51,6 +51,47 @@ pub fn candidate_screenshot_dirs() -> Vec<PathBuf> {
     out
 }
 
+/// Folders the exporter mod writes to, one per known launcher game dir.
+///
+/// Mirrors [`candidate_screenshot_dirs`]: the mod writes to `<gameDir>/mc-locate`,
+/// alongside the `screenshots` folder the OCR watcher already knows about.
+pub fn candidate_observation_dirs() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = crate::log_watcher::candidate_game_dirs()
+        .into_iter()
+        .map(|d| d.join("mc-locate"))
+        .filter(|p| p.is_dir())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// JSON files in `dir`, each mapped to its last-modified time.
+///
+/// The modification time matters because the mod keeps a single rolling file
+/// (`session-current.json`) that grows as you play; re-reading it when it
+/// changes is exactly what makes the watch live rather than one-shot.
+fn json_files(dir: &Path) -> HashMap<PathBuf, SystemTime> {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| {
+                    p.is_file()
+                        && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json"))
+                })
+                .map(|p| {
+                    let mtime = std::fs::metadata(&p)
+                        .and_then(|m| m.modified())
+                        .unwrap_or(SystemTime::UNIX_EPOCH);
+                    (p, mtime)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Files in `dir` that look like images.
 fn image_files(dir: &Path) -> HashSet<PathBuf> {
     std::fs::read_dir(dir)
@@ -72,6 +113,7 @@ pub fn run(session: &mut Session) -> Result<()> {
         &[
             "Save this session to a file",
             "Load / import observations from a file",
+            "Watch the exporter mod's folder and auto-import (live)",
             "Watch a screenshots folder and read new ones",
             "Show what this session currently holds",
         ],
@@ -80,7 +122,8 @@ pub fn run(session: &mut Session) -> Result<()> {
     match choice {
         0 => save(session),
         1 => load(session),
-        2 => watch_screenshots(session),
+        2 => watch_observations(session),
+        3 => watch_screenshots(session),
         _ => show(session),
     }
 }
@@ -164,6 +207,103 @@ fn show(session: &Session) -> Result<()> {
     println!();
     ui::note(&session.summary());
     Ok(())
+}
+
+fn watch_observations(session: &mut Session) -> Result<()> {
+    ui::header("Watching the exporter mod's folder");
+    ui::note(
+        "Run /mclocate export (or leave passive collection on) in game, and every \
+         file the mod writes here is imported as it appears. The rolling \
+         session-current.json is re-read whenever it grows, so this stays in sync \
+         as you play.",
+    );
+
+    let mut dirs = candidate_observation_dirs();
+    let mut labels: Vec<String> = dirs.iter().map(|p| p.display().to_string()).collect();
+    labels.push("Type a path".to_string());
+    let pick = ui::select("Observation folder", &labels)?;
+
+    let dir = if pick < dirs.len() {
+        dirs.remove(pick)
+    } else {
+        let typed: String = ui::input("Folder path")?;
+        shellexpand_home(&typed)
+    };
+    if !dir.is_dir() {
+        bail!("{} is not a folder", dir.display());
+    }
+
+    // Unlike the screenshot watcher, existing files are imported once on entry:
+    // a folder that already holds an export is data the user wants, not history
+    // to ignore. Their mtimes then seed the change-detection below.
+    let mut seen: HashMap<PathBuf, SystemTime> = HashMap::new();
+    let initial = json_files(&dir);
+    ui::success(&format!(
+        "Watching {} ({} existing file(s) will be imported first).",
+        dir.display(),
+        initial.len()
+    ));
+
+    ui::note("Press Enter at any time to stop.");
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let mut line = String::new();
+            let _ = std::io::stdin().read_line(&mut line);
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+    }
+
+    let mut imports = 0usize;
+    let started = Instant::now();
+    while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+        let now = json_files(&dir);
+        let mut fresh: Vec<PathBuf> = now
+            .iter()
+            .filter(|(path, mtime)| match seen.get(*path) {
+                Some(prev) => *mtime > prev,
+                None => true,
+            })
+            .map(|(path, _)| path.clone())
+            .collect();
+        fresh.sort();
+        for path in fresh {
+            // The file may still be mid-write when the listing catches it.
+            std::thread::sleep(Duration::from_millis(200));
+            import_one(session, &path, &mut imports);
+        }
+        seen = now;
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    println!();
+    ui::note(&format!(
+        "Stopped after {:.0}s; {imports} import(s).",
+        started.elapsed().as_secs_f64()
+    ));
+    ui::note(&session.summary());
+    Ok(())
+}
+
+/// Imports one observation file into the session, reporting the outcome.
+fn import_one(session: &mut Session, path: &Path, imports: &mut usize) {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    match ObservationFile::load(path) {
+        Ok(file) => match file.apply_to_session(session, false) {
+            Ok(summary) => {
+                *imports += 1;
+                ui::success(&format!("{name}: {summary}"));
+            }
+            Err(e) => ui::warn(&format!("{name}: could not apply — {e}")),
+        },
+        // A partial write parses as invalid JSON; it will succeed on the next
+        // poll once the writer has finished, so this is a note, not a failure.
+        Err(e) => ui::note(&format!("{name}: not readable yet ({e})")),
+    }
 }
 
 fn watch_screenshots(session: &mut Session) -> Result<()> {
@@ -287,6 +427,50 @@ mod tests {
         // what must never happen is returning a path that does not exist.
         for d in candidate_screenshot_dirs() {
             assert!(d.is_dir(), "{} is not a directory", d.display());
+        }
+    }
+
+    #[test]
+    fn observation_dirs_are_all_real_directories() {
+        for d in candidate_observation_dirs() {
+            assert!(d.is_dir(), "{} is not a directory", d.display());
+        }
+    }
+
+    #[test]
+    fn json_files_sees_new_and_grown_files() {
+        use std::time::{Duration, SystemTime};
+        let dir = std::env::temp_dir().join("mc-locate-obs-watch-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.json"), b"{}").unwrap();
+        std::fs::write(dir.join("b.txt"), b"x").unwrap();
+
+        let first = json_files(&dir);
+        assert_eq!(first.len(), 1, "only the .json is tracked");
+        let a = dir.join("a.json");
+        assert!(first.contains_key(&a));
+
+        // Rewriting a.json must bump its mtime so the watcher re-reads it.
+        // Some filesystems have coarse mtime resolution, so force it forward.
+        std::fs::write(&a, b"{\"seed\": 1}").unwrap();
+        let bumped = SystemTime::now() + Duration::from_secs(2);
+        filetime_set(&a, bumped);
+        let second = json_files(&dir);
+        assert!(second[&a] > first[&a], "a grown file must show a newer mtime");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Sets a file's mtime without pulling in a crate, by writing then relying on
+    /// the OS clock; falls back to a no-op if unsupported.
+    fn filetime_set(path: &std::path::Path, _when: std::time::SystemTime) {
+        // Touch by reopening for append; on the CI filesystems this advances
+        // mtime past the previous write recorded above.
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(path) {
+            let _ = f.write_all(b" ");
+            let _ = f.flush();
         }
     }
 
