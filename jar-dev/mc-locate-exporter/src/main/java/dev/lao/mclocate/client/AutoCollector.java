@@ -95,6 +95,22 @@ public final class AutoCollector {
 		}
 	}
 
+	/**
+	 * On a server the seed cannot be read, but the client stores the biome-zoom
+	 * seed — the world seed hashed twice — which pins it just as well. The access
+	 * widener opens the field; read it once per world. Singleplayer already has
+	 * the real seed, so skip it there.
+	 */
+	private void captureBiomeHash(Minecraft client) {
+		if (session.hasBiomeHash() || client.hasSingleplayerServer() || client.level == null) {
+			return;
+		}
+		long bz = client.level.getBiomeManager().biomeZoomSeed;
+		if (session.setBiomeHash(bz)) {
+			say(client, "§bmc-locate§r captured the biome hash — the CLI can pin the seed from it");
+		}
+	}
+
 	private void onLevelChange(Level level) {
 		// Eyes do not survive a dimension change, and a stale entity reference
 		// would report a bearing measured in a world we have left.
@@ -166,6 +182,7 @@ public final class AutoCollector {
 		}
 		wasInWorld = true;
 		captureSeed(client);
+		captureBiomeHash(client);
 
 		ResourceKey<Level> dim = client.level.dimension();
 		if (!dim.equals(lastDimension)) {

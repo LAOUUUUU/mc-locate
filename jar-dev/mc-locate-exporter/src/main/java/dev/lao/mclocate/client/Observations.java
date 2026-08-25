@@ -31,6 +31,7 @@ public final class Observations {
 	private Integer[] pillarHeights;
 	private String minecraftVersion;
 	private Long seed;
+	private Long biomeHash;
 
 	public void addBedrock(int x, int y, int z, boolean isBedrock) {
 		bedrock.add(String.format(Locale.ROOT,
@@ -77,6 +78,11 @@ public final class Observations {
 		this.seed = seed;
 	}
 
+	/** The client's biome-zoom seed (doubly-hashed world seed); pins the seed. */
+	public void setBiomeHash(Long biomeHash) {
+		this.biomeHash = biomeHash;
+	}
+
 	public int bedrockCount() {
 		return bedrock.size();
 	}
@@ -99,7 +105,7 @@ public final class Observations {
 
 	public boolean isEmpty() {
 		return bedrock.isEmpty() && slime.isEmpty() && structures.isEmpty()
-				&& eyeThrows.isEmpty() && pillarHeights == null && seed == null;
+				&& eyeThrows.isEmpty() && pillarHeights == null && seed == null && biomeHash == null;
 	}
 
 	public String toJson() {
@@ -110,6 +116,9 @@ public final class Observations {
 
 		if (seed != null) {
 			sb.append(",\n  \"seed\": ").append(seed.toString());
+		}
+		if (biomeHash != null) {
+			sb.append(",\n  \"biome_hash\": ").append(biomeHash.toString());
 		}
 		if (minecraftVersion != null) {
 			// Escaped even though the value comes from the game, not the user:

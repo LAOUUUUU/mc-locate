@@ -32,6 +32,7 @@ public final class Persistence {
 	/** Mirror of the observation schema, only for reading our own file back. */
 	private static final class Doc {
 		Long seed;
+		Long biome_hash;
 		String minecraft_version;
 		Integer[] pillar_heights;
 		Bedrock[] bedrock;
@@ -106,6 +107,9 @@ public final class Persistence {
 		if (doc.seed != null) {
 			session.setSeed(doc.seed);
 		}
+		if (doc.biome_hash != null) {
+			session.setBiomeHash(doc.biome_hash);
+		}
 		if (doc.minecraft_version != null) {
 			session.setMinecraftVersion(doc.minecraft_version);
 		}
@@ -141,7 +145,7 @@ public final class Persistence {
 		}
 
 		if (bedrock + slime + throws_ + structures == 0
-				&& !session.hasSeed() && !session.hasPillars()) {
+				&& !session.hasSeed() && !session.hasPillars() && !session.hasBiomeHash()) {
 			return null;
 		}
 		return String.format(java.util.Locale.ROOT,

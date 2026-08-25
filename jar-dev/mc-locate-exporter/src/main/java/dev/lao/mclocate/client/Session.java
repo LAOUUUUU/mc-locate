@@ -28,6 +28,7 @@ public final class Session {
 	private Integer[] pillarHeights;
 	private String minecraftVersion;
 	private Long seed;
+	private Long biomeHash;
 
 	/** Positions rejected because the session is already at its cap. */
 	private int dropped;
@@ -77,6 +78,17 @@ public final class Session {
 		return seed != null;
 	}
 
+	/** Records the biome-zoom seed (server case). Returns true if new. */
+	public synchronized boolean setBiomeHash(long value) {
+		boolean isNew = biomeHash == null || biomeHash != value;
+		biomeHash = value;
+		return isNew;
+	}
+
+	public synchronized boolean hasBiomeHash() {
+		return biomeHash != null;
+	}
+
 	public synchronized int bedrockCount() {
 		return bedrock.size();
 	}
@@ -103,7 +115,7 @@ public final class Session {
 
 	public synchronized boolean isEmpty() {
 		return bedrock.isEmpty() && slime.isEmpty() && structures.isEmpty()
-				&& throws_.isEmpty() && pillarHeights == null && seed == null;
+				&& throws_.isEmpty() && pillarHeights == null && seed == null && biomeHash == null;
 	}
 
 	public synchronized void clear() {
@@ -113,6 +125,7 @@ public final class Session {
 		throws_.clear();
 		pillarHeights = null;
 		seed = null;
+		biomeHash = null;
 		dropped = 0;
 	}
 
@@ -155,6 +168,9 @@ public final class Session {
 		}
 		if (seed != null) {
 			obs.setSeed(seed);
+		}
+		if (biomeHash != null) {
+			obs.setBiomeHash(biomeHash);
 		}
 		return obs;
 	}

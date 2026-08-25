@@ -4,18 +4,23 @@
   "version": "${version}",
   "name": "${name}",
   "description": "Exports mc-locate observations (Nether bedrock, End pillars, eye-of-ender bearings) from your own client for seed and coordinate recovery.",
-  "authors": ["Lao"],
+  "authors": [
+    "Lao"
+  ],
   "contact": {
     "sources": "https://github.com/LAOUUUUU/mc-locate"
   },
   "license": "MIT",
   "environment": "client",
   "entrypoints": {
-    "client": ["dev.lao.mclocate.client.ExporterClient"]
+    "client": [
+      "dev.lao.mclocate.client.ExporterClient"
+    ]
   },
   "depends": {
     "fabricloader": ">=0.16",
     "fabric-api": "*",
     "minecraft": "${minecraft}"
-  }
+  },
+  "accessWidener": "mc-locate-exporter.accesswidener"
 }

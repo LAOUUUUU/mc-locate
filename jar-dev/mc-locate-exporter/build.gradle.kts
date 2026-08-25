@@ -29,6 +29,14 @@ dependencies {
 }
 
 loom {
+    // The client's biome-zoom seed lives in a private field; an access widener
+    // opens it for reading. Stonecutter swaps the header between the 26.1+
+    // classTweaker form and the older one per version.
+    accessWidenerPath = sc.process(
+        rootProject.file("src/main/resources/mc-locate-exporter.accesswidener"),
+        "build/processed.accesswidener",
+    )
+
     runConfigs.all {
         preferGradleTask = true
         generateRunConfig = true
