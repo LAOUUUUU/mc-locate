@@ -66,6 +66,7 @@ server — they only read what your client can already see.
 | `/mclocate here` | Print your exact position, yaw, and dimension. |
 | `/mclocate mark <type>` | Record a structure at your current position (21 types). |
 | `/mclocate seed` | Record the world seed. **Singleplayer only** — the client owns the seed there, so no cracking is needed. |
+| `/mclocate structures` | Record nearby structures at their exact origins. **Singleplayer only** — servers don't send structure positions to the client. |
 | `/mclocate slime` / `slime not` | Mark the current chunk as a slime chunk / confirmed ordinary. Manual on purpose (see below). |
 | `/mclocate config` | Show settings, or `config <key> <value>` to change one in-game. |
 | `/mclocate shot` | Take a screenshot (feeds the CLI's F3 screenshot reader). |

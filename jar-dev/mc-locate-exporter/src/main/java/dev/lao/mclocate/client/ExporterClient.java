@@ -108,6 +108,9 @@ public class ExporterClient implements ClientModInitializer {
 			root.then(literal("seed")
 					.executes(ctx -> captureSeed(ctx.getSource())));
 
+			root.then(literal("structures")
+					.executes(ctx -> scanStructures(ctx.getSource())));
+
 			// Slime chunks are recorded by hand: a single slime spawn is not
 			// proof (swamps spawn them too), so the player confirms it. `slime`
 			// marks the current chunk as a slime chunk, `slime not` as confirmed
@@ -280,6 +283,24 @@ public class ExporterClient implements ClientModInitializer {
 		int z = (int) Math.floor(client.player.getZ());
 		session.addStructure(normalised, x, z);
 		feedback(source, "Marked §a" + normalised + "§r at " + x + ", " + z + ".");
+		return 1;
+	}
+
+	private int scanStructures(FabricClientCommandSource source) {
+		StructureReader.Result r = StructureReader.scan(session);
+		if (r.serverUnsupported()) {
+			feedback(source, "§cStructure reading needs your own singleplayer world — a server "
+					+ "does not send structure positions to the client. (Bedrock, pillars and eye "
+					+ "throws still work on servers.)");
+			return 0;
+		}
+		if (r.added() == 0) {
+			feedback(source, "§7No new structures in the loaded chunks around you. "
+					+ "Explore toward one and run this again.");
+			return 1;
+		}
+		feedback(source, "Recorded §a" + r.added() + "§r structure(s) at their exact origins; "
+				+ "§a" + session.structureCount() + "§r in session.");
 		return 1;
 	}
 

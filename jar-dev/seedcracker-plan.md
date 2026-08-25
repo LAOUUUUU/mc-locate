@@ -80,14 +80,28 @@ rule that has already caught real bugs.
 - Outcome (now real): structure coordinates + the hashed seed → one world seed,
   entirely in the CLI, verified three ways.
 
-**Tier 2 — Read the hashed seed off the connection.**
-- Small but high-value: on a server the client receives the hashed seed in the
-  login packet. Read it in the mod and export it, so the Tier-1 engine can pin
-  the exact world seed automatically. Pairs with manually-typed structure coords
-  today and with Tier 3 tomorrow. (Verify the read against a known singleplayer
-  world: `hashseed::hashed_seed(realSeed)` must equal the value the client got.)
+**Tier 2 — Read the hash off the client. ✅ DONE.**
+- On a server the seed can't be read, but the client stores the biome-zoom seed
+  (the world seed hashed twice; `BiomeManager.obfuscateSeed` is the same SHA-256
+  as the hashed seed, verified against the game). Rather than intercept the login
+  packet with a version-fragile mixin, an **access widener** opens that field for
+  reading — Loom remaps it per version (intermediary on 1.21.x, official on
+  26.x). The mod exports it as `biome_hash`, and mode 9 pins the exact world seed
+  from it. `hashseed::biome_hash` is verified against eight game vectors.
 
-**Tier 3 — Reading structures in-game (the headline feature).**
+**Tier 3 — Reading structures in-game (the headline feature). Phase 1 done.**
+
+✅ *Phase 1 — exact reading via the integrated server (`StructureReader`).* In
+singleplayer the client owns the server, which stores the authoritative
+`StructureStart` for every structure, so `/mclocate structures` records each
+structure's exact origin chunk with **zero guessed offsets** — the position the
+lift needs, straight from the game. This validates the whole cracker end to end
+(collect in a known world, crack, confirm the seed) and is the correctness
+oracle for Phase 2. On a server the client receives no structure starts, so this
+is honestly singleplayer-only; it is not faked there.
+
+▶ *Phase 2 — client-only detection on servers (still to do).* The remaining,
+hardest work below.
 
 This is what turns the tool from "type coordinates" into SCX's "run around and it
 cracks itself," and it is the hardest engineering here — the maths are done, this

@@ -51,8 +51,16 @@ public final class Session {
 		slime.put((((long) chunkX) << 32) | (chunkZ & 0xFFFFFFFFL), isSlime);
 	}
 
-	public synchronized void addStructure(String type, int x, int z) {
+	/** Records a structure at an origin, ignoring an exact repeat. Returns true if new. */
+	public synchronized boolean addStructure(String type, int x, int z) {
+		for (String[] e : structures) {
+			if (e[0].equals(type) && e[1].equals(Integer.toString(x))
+					&& e[2].equals(Integer.toString(z))) {
+				return false;
+			}
+		}
 		structures.add(new String[] { type, Integer.toString(x), Integer.toString(z) });
+		return true;
 	}
 
 	public synchronized void addThrow(EyeTracker.Throw t) {
