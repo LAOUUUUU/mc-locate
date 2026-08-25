@@ -64,10 +64,15 @@ jobs:
       - name: Publish to Modrinth & CurseForge
         uses: Kira-NT/mc-publish@v3
         with:
+          # Pass each platform's token only when its ID is set. Otherwise
+          # mc-publish still tries that platform on the strength of the token
+          # alone, falling back to the mod id as a slug — which CurseForge's API
+          # rejects. Gating the token means an unconfigured platform is truly
+          # skipped, so Modrinth can go live before CurseForge is approved.
           modrinth-id: ${{ vars.MODRINTH_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          modrinth-token: ${{ vars.MODRINTH_ID != '' && secrets.MODRINTH_TOKEN || '' }}
           curseforge-id: ${{ vars.CURSEFORGE_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          curseforge-token: ${{ vars.CURSEFORGE_ID != '' && secrets.CURSEFORGE_TOKEN || '' }}
           # No github-token on purpose: release.yml already attached these jars
           # to the GitHub release, so mc-publish should not touch it.
           files: dist/${{ matrix.jar }}
