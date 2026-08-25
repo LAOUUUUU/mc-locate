@@ -1,0 +1,82 @@
+name: Publish mod to Modrinth & CurseForge
+
+# Runs after a GitHub release is published (release.yml attaches the jars), and
+# uploads each version's jar to Modrinth and CurseForge.
+#
+# OFF BY DEFAULT. It only runs once you have:
+#   1. Created the projects on both sites (they need your account; CurseForge
+#      also needs manual approval).
+#   2. Added repo secrets  MODRINTH_TOKEN  and  CURSEFORGE_TOKEN.
+#   3. Added repo variables MODRINTH_ID (the project slug/id) and
+#      CURSEFORGE_ID (the numeric project id).
+#   4. Set repo variable   PUBLISH_MODS = true   to arm this workflow.
+# See jar-dev/mc-locate-exporter/PUBLISHING.md.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish jars from (e.g. v0.6.0)"
+        required: true
+
+jobs:
+  publish:
+    # Dormant until you explicitly arm it, so it never fails a normal release.
+    if: ${{ vars.PUBLISH_MODS == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Gentle on the two APIs rather than 14 uploads at once.
+      max-parallel: 3
+      matrix:
+        include:
+          - { jar: "mc-locate-exporter-0.1.0+1.21.jar",    name: "0.1.0+1.21",    game_versions: "1.21" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.1.jar",  name: "0.1.0+1.21.1",  game_versions: "1.21 1.21.1" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.2.jar",  name: "0.1.0+1.21.2",  game_versions: "1.21.2" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.3.jar",  name: "0.1.0+1.21.3",  game_versions: "1.21.3" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.4.jar",  name: "0.1.0+1.21.4",  game_versions: "1.21.4" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.5.jar",  name: "0.1.0+1.21.5",  game_versions: "1.21.5" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.6.jar",  name: "0.1.0+1.21.6",  game_versions: "1.21.6" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.7.jar",  name: "0.1.0+1.21.7",  game_versions: "1.21.7" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.8.jar",  name: "0.1.0+1.21.8",  game_versions: "1.21.7 1.21.8" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.9.jar",  name: "0.1.0+1.21.9",  game_versions: "1.21.9" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.10.jar", name: "0.1.0+1.21.10", game_versions: "1.21.10" }
+          - { jar: "mc-locate-exporter-0.1.0+1.21.11.jar", name: "0.1.0+1.21.11", game_versions: "1.21.11" }
+          - { jar: "mc-locate-exporter-0.1.0+26.1.2.jar",  name: "0.1.0+26.1.2",  game_versions: "26.1 26.1.1 26.1.2" }
+          - { jar: "mc-locate-exporter-0.1.0+26.2.jar",    name: "0.1.0+26.2",    game_versions: "26.2" }
+    steps:
+      - name: Resolve the release tag
+        id: tag
+        run: echo "tag=${{ github.event.release.tag_name || github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+
+      - name: Download this version's jar from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "${{ matrix.jar }}" \
+            --dir dist
+          ls -la dist
+
+      - name: Publish to Modrinth & CurseForge
+        uses: Kira-NT/mc-publish@v3
+        with:
+          modrinth-id: ${{ vars.MODRINTH_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          curseforge-id: ${{ vars.CURSEFORGE_ID }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          # No github-token on purpose: release.yml already attached these jars
+          # to the GitHub release, so mc-publish should not touch it.
+          files: dist/${{ matrix.jar }}
+          name: mc-locate exporter ${{ matrix.name }}
+          version: ${{ matrix.name }}
+          version-type: release
+          loaders: fabric
+          game-versions: ${{ matrix.game_versions }}
+          # Fabric API is read from the jar's fabric.mod.json depends block, but
+          # declared here too so the platforms show it as a required dependency.
+          dependencies: |
+            fabric-api(required)
