@@ -127,6 +127,28 @@ pub fn world_seeds_matching_hash(structure_seed: i64, observed: i64) -> Vec<i64>
         .collect()
 }
 
+/// The biome-zoom seed the client stores — the hashed seed hashed again.
+///
+/// On joining a world the client runs the server's hashed seed through
+/// `BiomeManager.obfuscateSeed`, which is byte-for-byte the same SHA-256 framing
+/// as [`hashed_seed`] (verified against the game). The result is kept in a field
+/// the exporter mod can read by reflection with no mixin, so it is the
+/// server-friendly way to get the same disambiguation power as the raw hashed
+/// seed — you just match against the double hash.
+pub fn biome_hash(world_seed: i64) -> i64 {
+    hashed_seed(hashed_seed(world_seed))
+}
+
+/// Like [`world_seeds_matching_hash`], but for the doubly-hashed biome seed the
+/// mod reads from `BiomeManager`.
+pub fn world_seeds_matching_biome_hash(structure_seed: i64, observed: i64) -> Vec<i64> {
+    let low = (structure_seed as u64) & MASK;
+    (0u64..65_536)
+        .map(|hi| ((hi << 48) | low) as i64)
+        .filter(|&ws| biome_hash(ws) == observed)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,6 +229,35 @@ mod tests {
             .collect();
 
         assert_eq!(worlds, vec![world], "only the true world seed should survive");
+    }
+
+    /// Ground truth for the biome-zoom seed — `obfuscateSeed(hashedSeed(seed))` —
+    /// straight from the game's `BiomeManager`. Confirms the double hash and,
+    /// implicitly, that obfuscateSeed is the same SHA-256 as hashLong.
+    #[test]
+    fn biome_hash_matches_the_game() {
+        let vectors: [(i64, i64); 8] = [
+            (0, 4978243150091466422),
+            (1, 4399471924234691836),
+            (-1, -8069622019703028862),
+            (42, 7401262386151203154),
+            (123456789, 5797260164526851119),
+            (-4172144997902289642, 8632423987145108184),
+            (8675309, -4615120266122708361),
+            (i64::MAX, 8253616770716532245),
+        ];
+        for (seed, want) in vectors {
+            assert_eq!(biome_hash(seed), want, "biome hash for {seed}");
+        }
+    }
+
+    #[test]
+    fn biome_hash_disambiguation_recovers_the_world_seed() {
+        let world: i64 = 0x0042_1357_9BDF_2468u64 as i64;
+        let structure = world & (MASK as i64);
+        let observed = biome_hash(world);
+        let found = world_seeds_matching_biome_hash(structure, observed);
+        assert_eq!(found, vec![world]);
     }
 
     #[test]

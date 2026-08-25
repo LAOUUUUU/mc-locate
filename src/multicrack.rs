@@ -103,6 +103,9 @@ pub fn pillar_arrangement(pillar_seed: u16) -> [Pillar; 10] {
 }
 
 /// The pillar seed a world seed produces.
+/// A hash-disambiguation matcher: (structure seed, observed hash) -> world seeds.
+type HashMatcher = fn(i64, i64) -> Vec<i64>;
+
 pub fn pillar_seed_of(world_seed: i64) -> u16 {
     (JavaRandom::new(world_seed).next_long() & 0xFFFF) as u16
 }
@@ -866,44 +869,61 @@ fn report(session: &mut Session, version: Option<Version>, found: Vec<i64>) -> R
          only on those, so 65,536 world seeds share each one.",
     );
 
-    // Hashed-seed disambiguation. The server derives a hashed seed from the full
-    // 64-bit world seed; testing the 65,536 lift candidates against it pins the
-    // exact seed. Unlike biomes, it needs no generator, so it works on versions
-    // past cubiomes too — offer it first.
+    // Hash disambiguation. The server derives a hashed seed from the full 64-bit
+    // world seed; testing the 65,536 lift candidates against it pins the exact
+    // seed. Needs no generator, so it works on versions past cubiomes too. Two
+    // forms: the raw hashed seed (from F3 or a mixin), and the doubly-hashed
+    // biome-zoom seed the exporter mod reads without a mixin — either works.
     if !found.is_empty() {
-        let use_hash = match session.hashed_seed {
-            Some(h) => ui::confirm(
-                &format!("Use the known hashed seed ({h}) to pick the exact world seed?"),
-                true,
-            )?,
-            None => ui::confirm(
-                "Know the hashed seed? (the exporter mod records it; it pins the exact seed)",
-                false,
-            )?,
+        // (label, matcher). Prefer whatever the session already carries.
+        let known: Option<(&str, i64, HashMatcher)> = if let Some(h) = session.hashed_seed
+        {
+            Some(("hashed seed", h, crate::hashseed::world_seeds_matching_hash))
+        } else {
+            session
+                .biome_hash
+                .map(|h| ("biome hash", h, crate::hashseed::world_seeds_matching_biome_hash as HashMatcher))
         };
-        if use_hash {
-            let hashed = match session.hashed_seed {
-                Some(h) => h,
-                None => ui::input("Hashed seed")?,
-            };
-            session.hashed_seed = Some(hashed);
 
+        let chosen: Option<(i64, HashMatcher)> = if let Some((label, h, f)) = known {
+            if ui::confirm(&format!("Use the known {label} ({h}) to pick the exact world seed?"), true)? {
+                Some((h, f))
+            } else {
+                None
+            }
+        } else {
+            match ui::select_str(
+                "Pin the exact world seed with a hash? (the exporter mod records one)",
+                &["No, skip", "Raw hashed seed (F3)", "Biome hash (from the mod's file)"],
+            )? {
+                1 => {
+                    let h: i64 = ui::input("Hashed seed")?;
+                    session.hashed_seed = Some(h);
+                    Some((h, crate::hashseed::world_seeds_matching_hash))
+                }
+                2 => {
+                    let h: i64 = ui::input("Biome hash")?;
+                    session.biome_hash = Some(h);
+                    Some((h, crate::hashseed::world_seeds_matching_biome_hash))
+                }
+                _ => None,
+            }
+        };
+
+        if let Some((hash, matcher)) = chosen {
             let pb = ui::spinner(&format!("checking {} x 65,536 candidates", found.len()));
-            let mut worlds: Vec<i64> = found
-                .iter()
-                .flat_map(|s| crate::hashseed::world_seeds_matching_hash(*s, hashed))
-                .collect();
+            let mut worlds: Vec<i64> = found.iter().flat_map(|s| matcher(*s, hash)).collect();
             worlds.sort_unstable();
             worlds.dedup();
             pb.finish_and_clear();
 
             if worlds.is_empty() {
                 ui::warn(
-                    "No world seed matched that hashed seed. Check the value, or the structure \
-                     seeds may not include the real one yet.",
+                    "No world seed matched that hash. Check the value, or the structure seeds may \
+                     not include the real one yet.",
                 );
             } else {
-                ui::success(&format!("{} world seed(s) from the hashed seed:", worlds.len()));
+                ui::success(&format!("{} world seed(s) from the hash:", worlds.len()));
                 for w in worlds.iter().take(16) {
                     println!("    {w}");
                 }
@@ -912,11 +932,11 @@ fn report(session: &mut Session, version: Option<Version>, found: Vec<i64>) -> R
                     ui::success("Stored as the session seed — done, no biome data needed.");
                     return Ok(());
                 }
-                ui::note("More than one matched (a rare hash collision); biome data below can settle it.");
+                ui::note("More than one matched (a rare collision); biome data below can settle it.");
             }
         }
     }
-    ui::note("Without a hashed seed, biome data separates the 65,536 candidates:");
+    ui::note("Without a hash, biome data separates the 65,536 candidates:");
 
     // Recovering the top 16 bits reads biomes, so it needs the generator.
     let Some(version) = version else {

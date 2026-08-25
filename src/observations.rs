@@ -58,6 +58,11 @@ pub struct ObservationFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hashed_seed: Option<i64>,
 
+    /// The doubly-hashed biome-zoom seed the client stores; same pinning power,
+    /// and readable by the exporter mod without a mixin.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub biome_hash: Option<i64>,
+
     /// Set when the session's version is past what the generator supports.
     /// Recorded so a saved session round-trips honestly rather than silently
     /// losing the fact that it is a 26.x world.
@@ -170,6 +175,7 @@ impl ObservationFile {
             unsupported_version: session.newer_version.clone(),
             seed: session.seed,
             hashed_seed: session.hashed_seed,
+            biome_hash: session.biome_hash,
             heading: session.heading,
             search_box: session.search_box.map(|b| BoxDto {
                 min_x: b.min_x,
@@ -246,6 +252,11 @@ impl ObservationFile {
             && (overwrite || session.hashed_seed.is_none())
         {
             session.hashed_seed = Some(h);
+        }
+        if let Some(h) = self.biome_hash
+            && (overwrite || session.biome_hash.is_none())
+        {
+            session.biome_hash = Some(h);
         }
         if let Some(s) = self.seed
             && (overwrite || session.seed.is_none())
@@ -492,6 +503,7 @@ mod tests {
         Session {
             seed: Some(1234),
             hashed_seed: Some(8794265229978523055),
+            biome_hash: Some(4978243150091466422),
             version: Some(Version::V1_21_1),
             heading: Some(137.5),
             search_box: Some(BBox::around(100, -200, 256)),

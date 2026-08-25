@@ -93,6 +93,9 @@ pub struct Session {
     /// The hashed seed the server derives from the full world seed (SHA-256
     /// based). Disambiguates the 65,536 world seeds a structure seed lifts to.
     pub hashed_seed: Option<i64>,
+    /// The doubly-hashed biome-zoom seed the client stores; the exporter mod
+    /// reads it without a mixin. Same disambiguation power as `hashed_seed`.
+    pub biome_hash: Option<i64>,
     /// The Minecraft version, when the bundled generator can generate it.
     pub version: Option<Version>,
     /// A version *newer* than the generator supports, recorded verbatim.
