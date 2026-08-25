@@ -30,16 +30,28 @@ jobs:
       # Gentle on the two APIs rather than 14 uploads at once.
       max-parallel: 3
       matrix:
-        # NOTE: game_versions is comma-separated. mc-publish treats a space as
-        # part of a single token, so "1.21.7 1.21.8" parses as one invalid
-        # version and uploads nothing — use commas for multi-version entries.
-        # TEMPORARILY narrowed to the three multi-version jars that failed the
-        # first run (the other eleven are already on Modrinth); restore the full
-        # 14-entry matrix after they publish.
+        # NOTE: game_versions is NEWLINE-separated (per mc-publish docs). Commas
+        # or spaces are read as one invalid token, so a multi-version entry
+        # uploads nothing. TEMPORARILY narrowed to the three multi-version jars
+        # that failed the first run (the other eleven are already on Modrinth);
+        # restore the full 14-entry matrix after they publish.
         include:
-          - { jar: "mc-locate-exporter-0.1.0+1.21.1.jar",  name: "0.1.0+1.21.1",  game_versions: "1.21, 1.21.1" }
-          - { jar: "mc-locate-exporter-0.1.0+1.21.8.jar",  name: "0.1.0+1.21.8",  game_versions: "1.21.7, 1.21.8" }
-          - { jar: "mc-locate-exporter-0.1.0+26.1.2.jar",  name: "0.1.0+26.1.2",  game_versions: "26.1, 26.1.1, 26.1.2" }
+          - jar: "mc-locate-exporter-0.1.0+1.21.1.jar"
+            name: "0.1.0+1.21.1"
+            game_versions: |
+              1.21
+              1.21.1
+          - jar: "mc-locate-exporter-0.1.0+1.21.8.jar"
+            name: "0.1.0+1.21.8"
+            game_versions: |
+              1.21.7
+              1.21.8
+          - jar: "mc-locate-exporter-0.1.0+26.1.2.jar"
+            name: "0.1.0+26.1.2"
+            game_versions: |
+              26.1
+              26.1.1
+              26.1.2
     steps:
       - name: Resolve the release tag
         id: tag
