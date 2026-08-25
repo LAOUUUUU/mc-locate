@@ -183,6 +183,33 @@ mod tests {
     }
 
     #[test]
+    fn a_candidate_set_with_decoys_collapses_to_one_world_seed() {
+        // The realistic Tier-1 case: the structure sieve leaves several
+        // structure-seed candidates, only one of which is real. The hashed seed
+        // matches the full world seed, so decoys contribute nothing and exactly
+        // the true world seed survives — the structures do not have to pin the
+        // structure seed uniquely on their own.
+        let world: i64 = 0x0007_1357_9BDF_2468u64 as i64;
+        let truth = world & (MASK as i64);
+        let observed = hashed_seed(world);
+
+        let candidates = [
+            truth,
+            (truth ^ 0x3) & (MASK as i64),
+            (truth ^ 0x2A0) & (MASK as i64),
+            (truth.wrapping_add(1)) & (MASK as i64),
+            (truth ^ 0x1_0000) & (MASK as i64),
+        ];
+
+        let worlds: Vec<i64> = candidates
+            .iter()
+            .flat_map(|s| world_seeds_matching_hash(*s, observed))
+            .collect();
+
+        assert_eq!(worlds, vec![world], "only the true world seed should survive");
+    }
+
+    #[test]
     fn a_wrong_hash_yields_no_seed() {
         // A hash no lift candidate produces (flip a bit of a real one) must
         // return nothing rather than a false seed.

@@ -22,15 +22,18 @@ tool is strictly more capable.
 - **A hybrid architecture** — a native Rust engine for the heavy exact math, fed
   live by the Fabric mod through the auto-import loop.
 
-**What SCX still does that we do not:**
+**What SCX still does that we do not** (updated after auditing the code):
 
-- **Liftable structure cracking from decorator features** — Igloo, Desert
-  Pyramid, Jungle Temple, Swamp Hut, Shipwreck, Pillager Outpost, each worth ~9
-  "regular + liftable" bits. This is SCX's bread and butter and our biggest gap.
-- **Hashed-seed disambiguation** — pick the one true world seed out of the 65 536
-  a structure seed lifts to, using the hashed seed the server sends.
+- ~~Liftable structure cracking~~ — **already present.** `lifting.rs` cracks a
+  structure seed from structure positions by bit-lifting, with salts pulled from
+  cubiomes' `getStructureConfig` (never hand-rolled), covering all six SCX
+  structures *and more* (Village, Ancient City, Trial Chambers, 1.18+
+  Fortress/Bastion). Tested end to end.
+- ~~Hashed-seed disambiguation~~ — **done** (`hashseed.rs`), verified against the
+  real Guava the game ships.
 - **In-game structure detection** — it draws an outline when it finds a structure
   and cracks automatically. We capture bedrock/pillars/eyes but not structures.
+  (Tier 2.)
 - **A mature in-game GUI** and progress/bit accounting.
 
 ## The thesis
@@ -63,14 +66,19 @@ rule that has already caught real bugs.
 
 ## Roadmap (tiers, biggest ROI first)
 
-**Tier 1 — Structure-seed engine in the CLI (the SCX core).**
-- Salt/bit tables for the six liftable structures, each verified vs cubiomes.
-- Feed observed structure positions into the existing lift + multi-source sieve.
-- **Hashed-seed disambiguation**: given structure-seed candidates and the hashed
-  seed, return the exact world seed. This is the single highest-value addition —
-  it collapses the 65 536-way lift ambiguity every other tool has to brute force.
-- Outcome: paste a few structure coordinates + the hashed seed → one world seed,
-  entirely in the CLI, verified.
+**Tier 1 — Structure-seed engine in the CLI (the SCX core). ✅ DONE.**
+- ✅ Salts for every liftable structure come from cubiomes' `getStructureConfig`,
+  not a hand-maintained table — the audit found this already built in `lifting.rs`
+  and tested (`a_known_seed_is_recovered_from_structures_alone`).
+- ✅ Structure positions feed the lift + multi-source sieve (mode 9).
+- ✅ **Hashed-seed disambiguation** (`hashseed.rs`, mode 9): structure-seed
+  candidates + the hashed seed → the exact world seed. Decoys contribute nothing,
+  so the structures need not pin the structure seed uniquely on their own. This
+  was the one genuinely missing piece, and it is the highest-leverage one — it
+  turns every source's 65 536-way lift into a single answer, no biome data, and
+  works on versions past cubiomes.
+- Outcome (now real): structure coordinates + the hashed seed → one world seed,
+  entirely in the CLI, verified three ways.
 
 **Tier 2 — Live structure capture in the mod.**
 - Detect a structure's origin from loaded chunks (start piece / bounding box),
