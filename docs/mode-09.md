@@ -47,8 +47,17 @@ from mode 4 or 1b, this narrows them cheaply.
 ## Recovering the full world seed
 
 All of the above give a *structure seed* — the low 48 bits. 65,536 world seeds
-share each one. Give the mode a few biome observations at spread-out
-coordinates and it brute-forces the remaining 16 bits against them.
+share each one, and there are two ways to pick the real one:
+
+**The hashed seed (preferred).** The server derives a hashed seed from the full
+64-bit world seed (a SHA-256 of it) and sends it to the client; the exporter mod
+records it, and it is visible in the debug data. Testing the 65,536 candidates
+against it pins the exact seed instantly — no biome data, and it works even on
+versions past the bundled generator, since it never consults worldgen.
+
+**Biome data (fallback).** Failing a hashed seed, give the mode a few biome
+observations at spread-out coordinates and it brute-forces the remaining 16 bits
+against them.
 
 **Also offers**, on its results, the per-constraint breakdown from mode 12 — a
 near miss at 146/147 almost always means one mis-typed coordinate rather than a

@@ -863,8 +863,60 @@ fn report(session: &mut Session, version: Option<Version>, found: Vec<i64>) -> R
     println!();
     ui::note(
         "These are structure seeds — the low 48 bits. Structures, slime and bedrock all depend \
-         only on those, so 65,536 world seeds share each one. Biome data separates them.",
+         only on those, so 65,536 world seeds share each one.",
     );
+
+    // Hashed-seed disambiguation. The server derives a hashed seed from the full
+    // 64-bit world seed; testing the 65,536 lift candidates against it pins the
+    // exact seed. Unlike biomes, it needs no generator, so it works on versions
+    // past cubiomes too — offer it first.
+    if !found.is_empty() {
+        let use_hash = match session.hashed_seed {
+            Some(h) => ui::confirm(
+                &format!("Use the known hashed seed ({h}) to pick the exact world seed?"),
+                true,
+            )?,
+            None => ui::confirm(
+                "Know the hashed seed? (the exporter mod records it; it pins the exact seed)",
+                false,
+            )?,
+        };
+        if use_hash {
+            let hashed = match session.hashed_seed {
+                Some(h) => h,
+                None => ui::input("Hashed seed")?,
+            };
+            session.hashed_seed = Some(hashed);
+
+            let pb = ui::spinner(&format!("checking {} x 65,536 candidates", found.len()));
+            let mut worlds: Vec<i64> = found
+                .iter()
+                .flat_map(|s| crate::hashseed::world_seeds_matching_hash(*s, hashed))
+                .collect();
+            worlds.sort_unstable();
+            worlds.dedup();
+            pb.finish_and_clear();
+
+            if worlds.is_empty() {
+                ui::warn(
+                    "No world seed matched that hashed seed. Check the value, or the structure \
+                     seeds may not include the real one yet.",
+                );
+            } else {
+                ui::success(&format!("{} world seed(s) from the hashed seed:", worlds.len()));
+                for w in worlds.iter().take(16) {
+                    println!("    {w}");
+                }
+                if worlds.len() == 1 {
+                    session.seed = Some(worlds[0]);
+                    ui::success("Stored as the session seed — done, no biome data needed.");
+                    return Ok(());
+                }
+                ui::note("More than one matched (a rare hash collision); biome data below can settle it.");
+            }
+        }
+    }
+    ui::note("Without a hashed seed, biome data separates the 65,536 candidates:");
 
     // Recovering the top 16 bits reads biomes, so it needs the generator.
     let Some(version) = version else {

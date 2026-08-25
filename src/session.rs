@@ -90,6 +90,9 @@ pub struct StructureObservation {
 #[derive(Debug, Default)]
 pub struct Session {
     pub seed: Option<i64>,
+    /// The hashed seed the server derives from the full world seed (SHA-256
+    /// based). Disambiguates the 65,536 world seeds a structure seed lifts to.
+    pub hashed_seed: Option<i64>,
     /// The Minecraft version, when the bundled generator can generate it.
     pub version: Option<Version>,
     /// A version *newer* than the generator supports, recorded verbatim.

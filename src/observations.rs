@@ -53,6 +53,11 @@ pub struct ObservationFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed: Option<i64>,
 
+    /// The server's hashed seed (SHA-256 based), which pins the full 64-bit
+    /// world seed given a structure seed. See [`crate::hashseed`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hashed_seed: Option<i64>,
+
     /// Set when the session's version is past what the generator supports.
     /// Recorded so a saved session round-trips honestly rather than silently
     /// losing the fact that it is a 26.x world.
@@ -164,6 +169,7 @@ impl ObservationFile {
             minecraft_version: session.version.map(|v| v.label().to_string()),
             unsupported_version: session.newer_version.clone(),
             seed: session.seed,
+            hashed_seed: session.hashed_seed,
             heading: session.heading,
             search_box: session.search_box.map(|b| BoxDto {
                 min_x: b.min_x,
@@ -235,6 +241,11 @@ impl ObservationFile {
             && (overwrite || session.newer_version.is_none())
         {
             session.newer_version = Some(v.clone());
+        }
+        if let Some(h) = self.hashed_seed
+            && (overwrite || session.hashed_seed.is_none())
+        {
+            session.hashed_seed = Some(h);
         }
         if let Some(s) = self.seed
             && (overwrite || session.seed.is_none())
@@ -480,6 +491,7 @@ mod tests {
     fn sample_session() -> Session {
         Session {
             seed: Some(1234),
+            hashed_seed: Some(8794265229978523055),
             version: Some(Version::V1_21_1),
             heading: Some(137.5),
             search_box: Some(BBox::around(100, -200, 256)),
