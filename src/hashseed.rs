@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn disambiguation_recovers_the_exact_world_seed() {
         // A world seed with non-zero high bits; its structure seed is the low 48.
-        let world: i64 = 0x1234_5678_9ABC_DEFu64 as i64;
+        let world: i64 = 0x0123_4567_89AB_CDEF_u64 as i64;
         let structure = world & (MASK as i64);
         let observed = hashed_seed(world);
 
