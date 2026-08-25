@@ -36,6 +36,9 @@ public final class Config {
 	/** Show a live status readout on the action bar (no effect on 26.2+). */
 	public boolean hud = false;
 
+	/** Announce structures as they load (singleplayer). */
+	public boolean announceStructures = true;
+
 	private Path file;
 
 	public static Config load(Path directory) {
@@ -60,6 +63,7 @@ public final class Config {
 		cfg.autoEyes = readBool(p, "autoEyes", cfg.autoEyes);
 		cfg.announce = readBool(p, "announce", cfg.announce);
 		cfg.hud = readBool(p, "hud", cfg.hud);
+		cfg.announceStructures = readBool(p, "announceStructures", cfg.announceStructures);
 		return cfg;
 	}
 
@@ -75,6 +79,7 @@ public final class Config {
 		p.setProperty("autoEyes", Boolean.toString(autoEyes));
 		p.setProperty("announce", Boolean.toString(announce));
 		p.setProperty("hud", Boolean.toString(hud));
+		p.setProperty("announceStructures", Boolean.toString(announceStructures));
 
 		try {
 			Files.createDirectories(file.getParent());

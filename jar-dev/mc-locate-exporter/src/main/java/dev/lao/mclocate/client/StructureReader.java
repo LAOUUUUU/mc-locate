@@ -36,8 +36,15 @@ public final class StructureReader {
     private StructureReader() {
     }
 
+    /** One newly-found structure at its exact origin. */
+    public record Found(String type, int x, int z) {
+    }
+
     /** Outcome of a scan; {@code serverUnsupported} means "not singleplayer". */
-    public record Result(int added, boolean serverUnsupported) {
+    public record Result(java.util.List<Found> found, boolean serverUnsupported) {
+        public int added() {
+            return found.size();
+        }
     }
 
     private static final int CHUNK_RADIUS = 8;
@@ -45,17 +52,18 @@ public final class StructureReader {
     public static Result scan(Session session) {
         Minecraft client = Minecraft.getInstance();
         if (!client.hasSingleplayerServer()) {
-            return new Result(0, true);
+            return new Result(java.util.List.of(), true);
         }
         var server = client.getSingleplayerServer();
         var player = client.player;
         if (server == null || player == null || client.level == null) {
-            return new Result(0, false);
+            return new Result(java.util.List.of(), false);
         }
         var serverLevel = server.getLevel(client.level.dimension());
         if (serverLevel == null) {
-            return new Result(0, false);
+            return new Result(java.util.List.of(), false);
         }
+        java.util.List<Found> found = new ArrayList<>();
         // The registry accessor was renamed in the 1.21.2 registry refactor:
         // registryOrThrow before, lookupOrThrow after (both return the Registry).
         //? if <1.21.2 {
@@ -68,7 +76,6 @@ public final class StructureReader {
         // avoid them and use getMinBlockX/Z (stable everywhere) throughout.
         int centerX = Math.floorDiv((int) Math.floor(player.getX()), 16);
         int centerZ = Math.floorDiv((int) Math.floor(player.getZ()), 16);
-        int added = 0;
         for (int cx = centerX - CHUNK_RADIUS; cx <= centerX + CHUNK_RADIUS; cx++) {
             for (int cz = centerZ - CHUNK_RADIUS; cz <= centerZ + CHUNK_RADIUS; cz++) {
                 LevelChunk chunk;
@@ -98,13 +105,15 @@ public final class StructureReader {
                         continue;
                     }
                     String name = normalise(id.getPath());
-                    if (session.addStructure(name, origin.getMinBlockX(), origin.getMinBlockZ())) {
-                        added++;
+                    int ox = origin.getMinBlockX();
+                    int oz = origin.getMinBlockZ();
+                    if (session.addStructure(name, ox, oz)) {
+                        found.add(new Found(name, ox, oz));
                     }
                 }
             }
         }
-        return new Result(added, false);
+        return new Result(found, false);
     }
 
     /**

@@ -60,6 +60,10 @@ public final class AutoCollector {
 	private static final int HUD_INTERVAL = 30;
 	private int sinceHud;
 
+	/** Scan for newly-loaded structures this often (~2s). */
+	private static final int STRUCT_INTERVAL = 40;
+	private int sinceStruct;
+
 	public AutoCollector(Session session, Config config, Path outputDir) {
 		this.session = session;
 		this.config = config;
@@ -183,6 +187,7 @@ public final class AutoCollector {
 		wasInWorld = true;
 		captureSeed(client);
 		captureBiomeHash(client);
+		announceStructures(client);
 
 		ResourceKey<Level> dim = client.level.dimension();
 		if (!dim.equals(lastDimension)) {
@@ -206,6 +211,27 @@ public final class AutoCollector {
 			Persistence.save(outputDir, session);
 		}
 		updateHud(client);
+	}
+
+	/**
+	 * Announces structures as their chunks load. Uses the integrated server's
+	 * exact origins (singleplayer), so it says "found X at (x, z)" the moment you
+	 * reach one, and records it for the crack. A server sends no structure starts,
+	 * so this is silent there rather than guessing.
+	 */
+	private void announceStructures(Minecraft client) {
+		if (!config.announceStructures || !client.hasSingleplayerServer()) {
+			return;
+		}
+		if (++sinceStruct < STRUCT_INTERVAL) {
+			return;
+		}
+		sinceStruct = 0;
+		StructureReader.Result r = StructureReader.scan(session);
+		for (StructureReader.Found f : r.found()) {
+			say(client, String.format(java.util.Locale.ROOT,
+					"§bmc-locate§r found §a%s§r at %d, %d", f.type(), f.x(), f.z()));
+		}
 	}
 
 	/**

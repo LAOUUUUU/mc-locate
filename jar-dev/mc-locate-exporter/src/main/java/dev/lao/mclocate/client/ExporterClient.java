@@ -316,8 +316,11 @@ public class ExporterClient implements ClientModInitializer {
 					+ "Explore toward one and run this again.");
 			return 1;
 		}
-		feedback(source, "Recorded §a" + r.added() + "§r structure(s) at their exact origins; "
-				+ "§a" + session.structureCount() + "§r in session.");
+		for (StructureReader.Found f : r.found()) {
+			feedback(source, "  §afound§r " + f.type() + " at " + f.x() + ", " + f.z());
+		}
+		feedback(source, "Recorded §a" + r.added() + "§r structure(s); §a"
+				+ session.structureCount() + "§r in session.");
 		return 1;
 	}
 
