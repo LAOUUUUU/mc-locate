@@ -36,8 +36,9 @@ public final class StructureReader {
     private StructureReader() {
     }
 
-    /** One newly-found structure at its exact origin. */
-    public record Found(String type, int x, int z) {
+    /** One newly-found structure: its exact origin and its block bounding box. */
+    public record Found(String type, int x, int z,
+            int minX, int minY, int minZ, int maxX, int maxY, int maxZ) {
     }
 
     /** Outcome of a scan; {@code serverUnsupported} means "not singleplayer". */
@@ -108,7 +109,9 @@ public final class StructureReader {
                     int ox = origin.getMinBlockX();
                     int oz = origin.getMinBlockZ();
                     if (session.addStructure(name, ox, oz)) {
-                        found.add(new Found(name, ox, oz));
+                        BoundingBox bb = start.getBoundingBox();
+                        found.add(new Found(name, ox, oz,
+                                bb.minX(), bb.minY(), bb.minZ(), bb.maxX(), bb.maxY(), bb.maxZ()));
                     }
                 }
             }

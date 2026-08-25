@@ -65,6 +65,11 @@ public final class AutoCollector {
 	private static final int STRUCT_INTERVAL = 40;
 	private int sinceStruct;
 
+	/** Re-emit the structure outline particles this often; they fade fast. */
+	private static final int OUTLINE_INTERVAL = 8;
+	private int sinceOutline;
+	private final StructureHighlighter highlighter = new StructureHighlighter();
+
 	/** Reset each time a world is left, so a known seed is flagged on every join. */
 	private boolean knownChecked;
 
@@ -213,6 +218,7 @@ public final class AutoCollector {
 				// session is never lost to a forgotten export.
 				wasInWorld = false;
 				knownChecked = false;
+				highlighter.clear();
 				Persistence.save(outputDir, session);
 			}
 			return;
@@ -221,7 +227,7 @@ public final class AutoCollector {
 		captureSeed(client);
 		captureBiomeHash(client);
 		checkKnownSeed(client);
-		announceStructures(client);
+		trackStructures(client);
 
 		ResourceKey<Level> dim = client.level.dimension();
 		if (!dim.equals(lastDimension)) {
@@ -253,18 +259,29 @@ public final class AutoCollector {
 	 * reach one, and records it for the crack. A server sends no structure starts,
 	 * so this is silent there rather than guessing.
 	 */
-	private void announceStructures(Minecraft client) {
-		if (!config.announceStructures || !client.hasSingleplayerServer()) {
+	private void trackStructures(Minecraft client) {
+		if (!client.hasSingleplayerServer() || client.player == null || client.level == null) {
 			return;
 		}
-		if (++sinceStruct < STRUCT_INTERVAL) {
+		if (!config.announceStructures && !config.outline) {
 			return;
 		}
-		sinceStruct = 0;
-		StructureReader.Result r = StructureReader.scan(session);
-		for (StructureReader.Found f : r.found()) {
-			say(client, String.format(java.util.Locale.ROOT,
-					"§bmc-locate§r found §a%s§r at %d, %d", f.type(), f.x(), f.z()));
+		if (++sinceStruct >= STRUCT_INTERVAL) {
+			sinceStruct = 0;
+			StructureReader.Result r = StructureReader.scan(session);
+			for (StructureReader.Found f : r.found()) {
+				highlighter.add(f);
+				if (config.announceStructures) {
+					say(client, String.format(java.util.Locale.ROOT,
+							"§bmc-locate§r found §a%s§r at %d, %d — outlined in the world",
+							f.type(), f.x(), f.z()));
+				}
+			}
+		}
+		if (config.outline && ++sinceOutline >= OUTLINE_INTERVAL) {
+			sinceOutline = 0;
+			highlighter.render(client.level,
+					client.player.getX(), client.player.getY(), client.player.getZ());
 		}
 	}
 
