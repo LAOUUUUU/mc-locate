@@ -145,6 +145,9 @@ public class ExporterClient implements ClientModInitializer {
 					.then(literal("on").executes(ctx -> setHud(ctx.getSource(), true)))
 					.then(literal("off").executes(ctx -> setHud(ctx.getSource(), false))));
 
+			root.then(literal("gui")
+					.executes(ctx -> openGui(ctx.getSource())));
+
 			dispatcher.register(root);
 		});
 
@@ -392,6 +395,21 @@ public class ExporterClient implements ClientModInitializer {
 		if (isSlime) {
 			feedback(source, "§7Only mark a chunk you have confirmed by a slime spawn below y=40.");
 		}
+		return 1;
+	}
+
+	private int openGui(FabricClientCommandSource source) {
+		Minecraft client = Minecraft.getInstance();
+		Config cfg = this.config;
+		// Deferred to the client thread: a command runs while the chat screen is
+		// closing, so open the config next tick. setScreen was renamed in 26.2.
+		client.execute(() -> {
+			//? if >=26.2 {
+			client.setScreenAndShow(new ConfigScreen(cfg));
+			//?} else
+			/*client.setScreen(new ConfigScreen(cfg));*/
+		});
+		feedback(source, "Opening the mc-locate settings…");
 		return 1;
 	}
 
