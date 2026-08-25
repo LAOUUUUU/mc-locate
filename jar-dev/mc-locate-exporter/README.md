@@ -115,6 +115,23 @@ to avoid. So confirm it yourself (a slime spawning below y=40, away from a
 swamp) and then `/mclocate slime`. Use `/mclocate slime not` for a chunk you're
 sure is ordinary.
 
+## Multiplayer
+
+It works on servers, with one exception. Every command is **client-side** —
+Fabric handles `/mclocate ...` locally and never sends it to the server — and
+every observation is a block or entity the server already sent your client
+because you are near it. So collecting bedrock, pillars, and eye bearings, and
+exporting them, all work on a normal (even vanilla) server. Nothing is sent to
+the server and no gameplay is changed.
+
+The exception is `/mclocate seed`: it reads the integrated server's seed, which
+only exists in singleplayer. On a server there is no seed to read — that is the
+whole reason to crack one. So the multiplayer flow is: collect here, then crack
+in the CLI.
+
+Seed cracking is against the rules on many servers (and hardened servers
+randomise the bits it relies on). Only use it where the server allows it.
+
 ## Config
 
 Settings live in `.minecraft/mc-locate/config.properties`, written on first run:

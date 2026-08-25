@@ -212,7 +212,9 @@ public class ExporterClient implements ClientModInitializer {
 	}
 
 	private int status(FabricClientCommandSource source) {
-		feedback(source, "§bmc-locate session§r");
+		Minecraft client = Minecraft.getInstance();
+		boolean server = !client.hasSingleplayerServer();
+		feedback(source, "§bmc-locate session§r  §7(" + (server ? "multiplayer" : "singleplayer") + ")");
 		feedback(source, String.format(Locale.ROOT, "  bedrock: §a%d§r (≈%.1f bits)%s",
 				session.bedrockCount(), session.bedrockCount() * 0.7219280948873623,
 				session.droppedCount() > 0 ? " §7[" + session.droppedCount() + " dropped at cap]" : ""));
@@ -233,6 +235,12 @@ public class ExporterClient implements ClientModInitializer {
 					left < 1.5 ? "≈1 — you likely have enough" : String.format(Locale.ROOT, "≈%.0f", left)));
 		} else {
 			feedback(source, "  §7no candidate source yet — read the End pillars to get one");
+		}
+		if (server && !session.hasSeed()) {
+			// The seed cannot be read off a server, so the whole point here is to
+			// collect and crack. Say so, since /mclocate seed will refuse.
+			feedback(source, "  §7on a server: collect here, then crack in the CLI "
+					+ "(the seed can't be read directly). Check the server allows seed cracking.");
 		}
 		return 1;
 	}
