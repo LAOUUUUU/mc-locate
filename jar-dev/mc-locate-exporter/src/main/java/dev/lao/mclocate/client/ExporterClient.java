@@ -124,6 +124,13 @@ public class ExporterClient implements ClientModInitializer {
 											StringArgumentType.getString(ctx, "key"),
 											StringArgumentType.getString(ctx, "value"))))));
 
+			root.then(literal("shot")
+					.executes(ctx -> takeShot(ctx.getSource())));
+
+			root.then(literal("hud")
+					.then(literal("on").executes(ctx -> setHud(ctx.getSource(), true)))
+					.then(literal("off").executes(ctx -> setHud(ctx.getSource(), false))));
+
 			dispatcher.register(root);
 		});
 
@@ -298,12 +305,43 @@ public class ExporterClient implements ClientModInitializer {
 		return 1;
 	}
 
+	private int takeShot(FabricClientCommandSource source) {
+		Minecraft client = Minecraft.getInstance();
+		if (client.level == null) {
+			feedback(source, "§cNo world loaded.");
+			return 0;
+		}
+		// 26.2's render rewrite dropped getMainRenderTarget and added a
+		// Minecraft-only grab; earlier versions take the render target directly.
+		//? if >=26.2 {
+		net.minecraft.client.Screenshot.grab(client, false);
+		//?} else
+		/*net.minecraft.client.Screenshot.grab(client.gameDirectory, client.getMainRenderTarget(), msg -> {});*/
+		feedback(source, "Screenshot saved to the §escreenshots§r folder — the CLI's screenshot watcher can OCR it.");
+		return 1;
+	}
+
+	private int setHud(FabricClientCommandSource source, boolean on) {
+		config.hud = on;
+		config.save();
+		if (!on) {
+			feedback(source, "HUD §coff§r.");
+			return 1;
+		}
+		//? if <26.2 {
+		/*feedback(source, "HUD §aon§r — live status shows on the action bar.");
+		*///?} else
+		feedback(source, "§eHUD on, but 26.2 removed the client action bar (render rewrite); it won't show. Use /mclocate status.");
+		return 1;
+	}
+
 	private int showConfig(FabricClientCommandSource source) {
 		feedback(source, "§bmc-locate config§r  (change with §e/mclocate config <key> <value>§r)");
 		feedback(source, "  autoBedrock = " + config.autoBedrock);
 		feedback(source, "  autoPillars = " + config.autoPillars);
 		feedback(source, "  autoEyes = " + config.autoEyes);
 		feedback(source, "  announce = " + config.announce);
+		feedback(source, "  hud = " + config.hud);
 		feedback(source, "  bedrockStride = " + config.bedrockStride + "  §7(1-16)");
 		feedback(source, "  maxBedrock = " + config.maxBedrock);
 		return 1;
@@ -316,6 +354,7 @@ public class ExporterClient implements ClientModInitializer {
 				case "autopillars" -> config.autoPillars = Boolean.parseBoolean(value);
 				case "autoeyes" -> config.autoEyes = Boolean.parseBoolean(value);
 				case "announce" -> config.announce = Boolean.parseBoolean(value);
+				case "hud" -> config.hud = Boolean.parseBoolean(value);
 				case "bedrockstride" -> config.bedrockStride = Math.max(1, Math.min(16, Integer.parseInt(value)));
 				case "maxbedrock" -> config.maxBedrock = Math.max(64, Integer.parseInt(value));
 				default -> {

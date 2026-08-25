@@ -68,6 +68,8 @@ server — they only read what your client can already see.
 | `/mclocate seed` | Record the world seed. **Singleplayer only** — the client owns the seed there, so no cracking is needed. |
 | `/mclocate slime` / `slime not` | Mark the current chunk as a slime chunk / confirmed ordinary. Manual on purpose (see below). |
 | `/mclocate config` | Show settings, or `config <key> <value>` to change one in-game. |
+| `/mclocate shot` | Take a screenshot (feeds the CLI's F3 screenshot reader). |
+| `/mclocate hud on` / `off` | Live status on the action bar. Works on 1.21.x and 26.1.x; 26.2 removed the client action bar in its render rewrite, so it no-ops there. |
 | `/mclocate export` | Write everything collected so far to a JSON file. |
 | `/mclocate clear` | Empty the current session. |
 
@@ -125,6 +127,7 @@ Settings live in `.minecraft/mc-locate/config.properties`, written on first run:
 | `bedrockStride` | `4` | Sample every Nth block in a chunk layer |
 | `maxBedrock` | `4096` | Stop accumulating past this many samples |
 | `announce` | `true` | Print a chat line when something is collected |
+| `hud` | `false` | Live action-bar status (1.21.x / 26.1.x only) |
 
 ---
 

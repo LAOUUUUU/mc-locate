@@ -56,6 +56,10 @@ public final class AutoCollector {
 	private int sinceSave;
 	private boolean wasInWorld;
 
+	/** Refresh the action-bar HUD this often; the vanilla message fades by ~60. */
+	private static final int HUD_INTERVAL = 30;
+	private int sinceHud;
+
 	public AutoCollector(Session session, Config config, Path outputDir) {
 		this.session = session;
 		this.config = config;
@@ -184,6 +188,31 @@ public final class AutoCollector {
 			sinceSave = 0;
 			Persistence.save(outputDir, session);
 		}
+		updateHud(client);
+	}
+
+	/**
+	 * Paints a live one-line readout on the action bar.
+	 *
+	 * <p>Only 1.21.x and 26.1.x expose the action-bar setter; 26.2's render
+	 * rewrite removed it, so this compiles to a no-op there and the toggle says
+	 * as much.
+	 */
+	private void updateHud(Minecraft client) {
+		if (!config.hud || client.player == null) {
+			return;
+		}
+		if (++sinceHud < HUD_INTERVAL) {
+			return;
+		}
+		sinceHud = 0;
+		//? if <26.2 {
+		/*int n = session.bedrockCount();
+		String tail = session.hasSeed() ? " §aseed!" : session.hasPillars() ? " pillars" : "";
+		String text = String.format(java.util.Locale.ROOT,
+				"§bmc-locate§r %d bedrock · %d throw(s)%s", n, session.throwCount(), tail);
+		client.gui.setOverlayMessage(Component.literal(text), false);
+		*///?}
 	}
 
 	private void tickPillars(Minecraft client) {

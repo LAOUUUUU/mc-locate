@@ -33,6 +33,9 @@ public final class Config {
 	/** Print a chat line when something is collected. */
 	public boolean announce = true;
 
+	/** Show a live status readout on the action bar (no effect on 26.2+). */
+	public boolean hud = false;
+
 	private Path file;
 
 	public static Config load(Path directory) {
@@ -56,6 +59,7 @@ public final class Config {
 		cfg.autoPillars = readBool(p, "autoPillars", cfg.autoPillars);
 		cfg.autoEyes = readBool(p, "autoEyes", cfg.autoEyes);
 		cfg.announce = readBool(p, "announce", cfg.announce);
+		cfg.hud = readBool(p, "hud", cfg.hud);
 		return cfg;
 	}
 
@@ -70,6 +74,7 @@ public final class Config {
 		p.setProperty("autoPillars", Boolean.toString(autoPillars));
 		p.setProperty("autoEyes", Boolean.toString(autoEyes));
 		p.setProperty("announce", Boolean.toString(announce));
+		p.setProperty("hud", Boolean.toString(hud));
 
 		try {
 			Files.createDirectories(file.getParent());
