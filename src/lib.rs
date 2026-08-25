@@ -14,6 +14,7 @@ pub mod ocr;
 pub mod pose;
 pub mod portal;
 pub mod random;
+pub mod decorator;
 pub mod reverser;
 pub mod session;
 pub mod sessionfile;

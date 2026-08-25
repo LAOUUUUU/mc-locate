@@ -9,8 +9,8 @@ use anyhow::Result;
 
 use crate::session::Session;
 use crate::{
-    advisor, bedrock, compass, docs, logscrape, multicrack, ocr, portal, pose, sessionfile, slime,
-    stronghold, structure, terrain,
+    advisor, bedrock, compass, decorator, docs, logscrape, multicrack, ocr, portal, pose,
+    sessionfile, slime, stronghold, structure, terrain,
 };
 
 /// One entry in the main menu.
@@ -108,6 +108,12 @@ pub const MODES: &[Mode] = &[
         summary: "The full write-up for every mode, offline",
         doc: include_str!("../docs/mode-14.md"),
         run: docs::run,
+    },
+    Mode {
+        name: "Decorator / Population-Seed Crack",
+        summary: "Narrow the seed from a decorated feature (ores, plants, a dungeon)",
+        doc: include_str!("../docs/mode-15.md"),
+        run: decorator::run,
     },
 ];
 
