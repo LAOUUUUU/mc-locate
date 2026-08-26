@@ -34,8 +34,12 @@ public class LevelRendererMixin {
         if (boxes.isEmpty()) {
             return;
         }
-        net.minecraft.client.Camera cam = net.minecraft.client.Minecraft.getInstance()
-                .gameRenderer.getMainCamera();
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        net.minecraft.client.multiplayer.ClientLevel lvl = mc.level;
+        if (lvl == null) {
+            return;
+        }
+        net.minecraft.client.Camera cam = mc.gameRenderer.getMainCamera();
         net.minecraft.world.phys.Vec3 camPos = cam.position();
 
         com.mojang.blaze3d.vertex.PoseStack pose = new com.mojang.blaze3d.vertex.PoseStack();
@@ -54,9 +58,18 @@ public class LevelRendererMixin {
                 buffers.getBuffer(net.minecraft.client.renderer.rendertype.RenderTypes.secondaryBlockOutline());
 
         for (int[] b : boxes) {
+            // The structure's reported bounding-box Y is unreliable (some float
+            // far above the surface), while its X/Z is exact. So keep the X/Z
+            // footprint but anchor the box to the terrain surface at its centre —
+            // it sits on the ground where the structure is, every time.
+            int cx = (b[0] + b[3]) / 2;
+            int cz = (b[2] + b[5]) / 2;
+            int surface = lvl.getHeight(
+                    net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, cx, cz);
+            int height = Math.max(4, Math.min(32, b[4] - b[1]));
             net.minecraft.world.phys.shapes.VoxelShape shape =
                     net.minecraft.world.phys.shapes.Shapes.create(new net.minecraft.world.phys.AABB(
-                            b[0], b[1], b[2], b[3] + 1, b[4] + 1, b[5] + 1));
+                            b[0], surface - 1, b[2], b[3] + 1, surface - 1 + height, b[5] + 1));
             int color = b.length > 6 ? b[6] : 0xFF33FF66;
             int dim = (color & 0x00FFFFFF) | 0x80000000;
             net.minecraft.client.renderer.ShapeRenderer.renderShape(
