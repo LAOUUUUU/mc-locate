@@ -25,5 +25,20 @@ stonecutter parameters {
         string(current.parsed >= "26.1") {
             replace("classTweaker v2 named", "classTweaker v2 official")
         }
+
+        // The see-through outline needs RenderType.create, which is package-
+        // private. Widen it only on 1.21.11, the one version whose new render
+        // pipeline (and RenderSetup) this mod's wireframe targets; elsewhere the
+        // line stays an inert "#..." comment so the widener never names a class
+        // that version lacks. Loom applies the widener to the compile classpath
+        // too, so the mixin can call create() directly without an @Invoker.
+        string(current.parsed >= "1.21.11" && current.parsed < "26.1") {
+            replace(
+                "#XRAY_CREATE_DISABLED#",
+                "accessible method net/minecraft/client/renderer/rendertype/RenderType "
+                    + "create (Ljava/lang/String;Lnet/minecraft/client/renderer/rendertype/RenderSetup;)"
+                    + "Lnet/minecraft/client/renderer/rendertype/RenderType;",
+            )
+        }
     }
 }
