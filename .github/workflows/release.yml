@@ -152,6 +152,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Needed to dispatch publish-mods.yml below.
+      actions: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -167,3 +169,13 @@ jobs:
             --title "mc-locate ${GITHUB_REF_NAME}" \
             --notes "Prebuilt CLI binaries for macOS (Apple Silicon and Intel), Linux x86_64 and Windows x86_64, plus the Fabric exporter mod for every supported Minecraft version (1.21-1.21.11, 26.1.x, 26.2). See README.md for the CLI, and jar-dev/mc-locate-exporter/README.md for which mod jar to grab." \
             artifacts/*.tar.gz artifacts/*.zip artifacts/*.jar
+
+      # A release created with the default GITHUB_TOKEN does NOT fire the
+      # `release: published` event (GitHub's anti-recursion rule), so
+      # publish-mods.yml would never run on its own. workflow_dispatch is exempt
+      # from that rule, so dispatch it explicitly here. publish-mods.yml is still
+      # gated on vars.PUBLISH_MODS, so this is a no-op until the mods are armed.
+      - name: Trigger Modrinth/CurseForge publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run publish-mods.yml -f tag="${GITHUB_REF_NAME}"
