@@ -40,7 +40,7 @@ enough to collapse the space to a single seed.
 |  |  |
 |---|---|
 | **15 modes** | seed cracking (incl. decorator/population-seed), coordinate recovery, Bayesian triangulation, screenshot OCR, live log watching |
-| **212 tests** | every RNG formula checked against an independent source, not from memory |
+| **293 tests** | every RNG formula checked against an independent source, not from memory |
 | **34 versions** | Beta 1.7 through 26.2 — current Minecraft |
 | **3 platforms** | one universal macOS binary, Linux x86_64, Windows x86_64 |
 | **No setup** | no Rust, no Java, no Minecraft install needed to run it |
@@ -226,7 +226,7 @@ Details worth knowing:
 
 Minecraft constants are easy to misremember, so nothing here is hardcoded from
 memory. Every RNG formula is checked against an independent source in the test
-suite (157 tests):
+suite (293 tests):
 
 - **`java.util.Random`** — cross-checked draw-for-draw against the unrelated
   `java_random` crate, plus literal values from a real JVM. The modular inverse
@@ -247,7 +247,7 @@ suite (157 tests):
 Several modes also carry end-to-end round trips: harvest real data out of the
 generator, feed it back in, and assert the original answer comes back.
 
-162 tests with `--features ocr`, 157 without.
+296 tests with `--features ocr`, 293 without.
 
 ### Three findings worth recording
 
@@ -502,8 +502,13 @@ so a green tick means it genuinely builds and passes everywhere. To cut a
 release, tag it:
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.10.0 && git push origin v0.10.0
 ```
+
+That one push builds the CLI binaries and all the exporter-mod jars, publishes
+the GitHub release, and — when the mods are armed (`vars.PUBLISH_MODS`) — pushes
+every jar to Modrinth and CurseForge. See
+[PUBLISHING.md](jar-dev/mc-locate-exporter/PUBLISHING.md).
 
 ## A note on use
 

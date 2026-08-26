@@ -66,7 +66,7 @@ server — they only read what your client can already see.
 | `/mclocate here` | Print your exact position, yaw, and dimension. |
 | `/mclocate mark <type>` | Record a structure at your current position (21 types). |
 | `/mclocate seed` | Record the world seed. **Singleplayer only** — the client owns the seed there, so no cracking is needed. |
-| `/mclocate structures` | Record nearby structures at their exact origins, announced with coordinates automatically as you explore. **Singleplayer only.** |
+| `/mclocate structures` | Record nearby structures at their exact origins, announced with coordinates automatically as you explore, and outline them in the world (see below). **Singleplayer only.** |
 | `/mclocate known` | List your known-seed database; `known add <name>` saves the current seed. You're told when you join a known seed — even on a server, via its biome hash. |
 | `/mclocate gui` | Open a settings screen (toggles for all the auto/announce options). |
 | `/mclocate slime` / `slime not` | Mark the current chunk as a slime chunk / confirmed ordinary. Manual on purpose (see below). |
@@ -118,6 +118,31 @@ to avoid. So confirm it yourself (a slime spawning below y=40, away from a
 swamp) and then `/mclocate slime`. Use `/mclocate slime not` for a chunk you're
 sure is ordinary.
 
+### Structure outline (1.21.11)
+
+In singleplayer, the mod draws a **wireframe box** around every structure it
+finds, sitting on the structure's exact bounding box — the same authoritative
+position the crack uses, read straight from the integrated server, not a guess.
+The box is drawn with a custom no-depth line type, so it stays **visible through
+terrain and water** — you can see a buried temple or a sunken shipwreck from a
+distance before you reach it.
+
+The colour rates how useful the structure is for cracking:
+
+- **Green** — best (high-bit liftable features: desert/jungle pyramid, swamp
+  hut, igloo, shipwreck, pillager outpost).
+- **Yellow** — decent (village, ocean ruin, ruined portal, ancient city, trial
+  chambers, fortress, bastion, buried treasure, trail ruins).
+- **Purple** — weak but occasionally helpful (monument, mansion, end city).
+- **Red** — lowest.
+
+Toggle it with the `outline` config key or in `/mclocate gui`. Drawing hooks the
+world renderer through a mixin, which the 1.21.9 render rework made
+version-specific, so the outline is currently **1.21.11 only**; the coordinate
+notifications work on every version. If a rendering mod ever rejects the custom
+line type, the outline disables itself with a single log line rather than
+affecting the game.
+
 ## Multiplayer
 
 It works on servers, with one exception. Every command is **client-side** —
@@ -147,6 +172,8 @@ Settings live in `.minecraft/mc-locate/config.properties`, written on first run:
 | `bedrockStride` | `4` | Sample every Nth block in a chunk layer |
 | `maxBedrock` | `4096` | Stop accumulating past this many samples |
 | `announce` | `true` | Print a chat line when something is collected |
+| `announceStructures` | `true` | Chat a line the moment a structure loads nearby (singleplayer) |
+| `outline` | `true` | Draw the in-world structure wireframe (1.21.11) |
 | `hud` | `false` | Live action-bar status (1.21.x / 26.1.x only) |
 
 ---
@@ -170,16 +197,21 @@ care whether a mod, a script, or you by hand wrote it.
 
 - **Client-side only.** Reads your own loaded chunks and your own thrown eyes.
   No packets are forged; no other player is ever referenced.
-- **No structures via generation.** It records structures you *stand on* with
-  `mark`, but it does not compute structure positions — that needs the CLI's
-  worldgen backend, which the mod deliberately doesn't ship.
+- **Structures come from the integrated server, so `/mclocate structures` and
+  the outline are singleplayer-only.** There the client owns the server, which
+  stores each structure's authoritative `StructureStart` — an exact origin with
+  no guessed offset. A remote server never sends structure starts to the client,
+  so it does not fake them there; on a server, use `mark` for one you stand on.
+  The mod never computes structure positions itself — that needs the CLI's
+  worldgen backend, which it deliberately doesn't ship.
 - **Server rules.** Seed-cracking is against the rules on many servers, and
   hardened servers randomise the very bits this relies on (Paper's
   `feature-seeds` and friends). On those it simply won't converge — by design.
-- **Not yet tested in a live game.** Every version *compiles* against the real
-  Minecraft API and the JSON round-trips through the CLI's tests, but the
-  in-game behaviour (chunk-load timing, the pillar scan) is unverified. If you
-  hit something, please open an issue.
+- **In-game tested on 1.21.11.** Collection, the structure scan, and the outline
+  are confirmed working there in a real world; every other version *compiles*
+  against the real Minecraft API and the JSON round-trips through the CLI's
+  tests, but their in-game behaviour is less exercised. If you hit something,
+  please open an issue.
 
 ---
 
