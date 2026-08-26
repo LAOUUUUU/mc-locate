@@ -25,5 +25,6 @@
   "accessWidener": "mc-locate-exporter.accesswidener",
   "mixins": [
     "mc-locate-exporter.mixins.json"
-  ]
+  ],
+  "icon": "assets/mc-locate-exporter/icon.png"
 }
