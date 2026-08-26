@@ -3,7 +3,7 @@
 mod.id = "mc-locate-exporter"
 mod.name = "mc-locate exporter"
 mod.group = "dev.lao"
-mod.version = "0.3.0"
+mod.version = "0.4.0"
 
 deps.fabric_loader = "0.19.3"
 loomx.loom_version = "1.17-SNAPSHOT"
