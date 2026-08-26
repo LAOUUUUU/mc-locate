@@ -58,14 +58,20 @@ public class LevelRendererMixin {
                 buffers.getBuffer(net.minecraft.client.renderer.rendertype.RenderTypes.secondaryBlockOutline());
 
         for (int[] b : boxes) {
-            // The structure's reported bounding-box Y is unreliable (some float
-            // far above the surface), while its X/Z is exact. So keep the X/Z
-            // footprint but anchor the box to the terrain surface at its centre —
-            // it sits on the ground where the structure is, every time.
+            // Structure X/Z is exact but the reported bounding-box Y is not, so
+            // anchor the box to the ground at its centre. Only do this for boxes
+            // near the player: a far box sits in an unloaded chunk whose height
+            // map is garbage (that was the "lines into the sky"), and skipping
+            // them is faster too.
             int cx = (b[0] + b[3]) / 2;
             int cz = (b[2] + b[5]) / 2;
+            if (Math.abs(cx - camPos.x) > 128 || Math.abs(cz - camPos.z) > 128) {
+                continue;
+            }
+            // OCEAN_FLOOR, not WORLD_SURFACE, so an ocean ruin sits on the
+            // seabed rather than floating up at the water surface.
             int surface = lvl.getHeight(
-                    net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, cx, cz);
+                    net.minecraft.world.level.levelgen.Heightmap.Types.OCEAN_FLOOR, cx, cz);
             int height = Math.max(4, Math.min(32, b[4] - b[1]));
             net.minecraft.world.phys.shapes.VoxelShape shape =
                     net.minecraft.world.phys.shapes.Shapes.create(new net.minecraft.world.phys.AABB(
