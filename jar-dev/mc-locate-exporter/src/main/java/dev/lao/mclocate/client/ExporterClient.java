@@ -49,6 +49,8 @@ public class ExporterClient implements ClientModInitializer {
 	private final Session session = new Session();
 	private Config config;
 	private SeedDatabase seeds;
+	private StructureOffsets offsets;
+	private StructureDetector detector;
 
 	@Override
 	public void onInitializeClient() {
@@ -63,7 +65,9 @@ public class ExporterClient implements ClientModInitializer {
 		}
 
 		seeds = SeedDatabase.load(dir);
-		new AutoCollector(session, config, dir, seeds).register();
+		offsets = StructureOffsets.load(dir);
+		detector = new StructureDetector(offsets);
+		new AutoCollector(session, config, dir, seeds, detector).register();
 
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registry) -> {
 			LiteralArgumentBuilder<FabricClientCommandSource> root = literal("mclocate");
@@ -76,6 +80,15 @@ public class ExporterClient implements ClientModInitializer {
 
 			root.then(literal("pillars")
 					.executes(ctx -> scanPillars(ctx.getSource())));
+
+			// Master switch — the whole mod on/off.
+			root.then(literal("on").executes(ctx -> setEnabled(ctx.getSource(), true)));
+			root.then(literal("off").executes(ctx -> setEnabled(ctx.getSource(), false)));
+
+			// Client-side structure detection (servers): calibrate in SP, then it
+			// runs automatically on servers.
+			root.then(literal("calibrate").executes(ctx -> calibrate(ctx.getSource())));
+			root.then(literal("detect").executes(ctx -> detectStatus(ctx.getSource())));
 
 			root.then(literal("auto")
 					.then(literal("on").executes(ctx -> setAuto(ctx.getSource(), true)))
@@ -216,6 +229,40 @@ public class ExporterClient implements ClientModInitializer {
 		}
 		session.setPillarHeights(heights);
 		feedback(source, "Recorded §a" + measured + "/10§r pillar heights.");
+		return 1;
+	}
+
+	private int setEnabled(FabricClientCommandSource source, boolean on) {
+		config.enabled = on;
+		config.save();
+		if (!on) {
+			Outlines.enabled = false;
+			// Flush before going inert so nothing collected is lost.
+			Persistence.save(outputDirectory(), session);
+			feedback(source, "§bmc-locate §cOFF§r — inert: no collection, capture, detection, or outline. "
+					+ "Turn back on with §e/mclocate on§r.");
+		} else {
+			feedback(source, "§bmc-locate §aON§r — collecting and detecting again.");
+		}
+		return 1;
+	}
+
+	private int calibrate(FabricClientCommandSource source) {
+		detector.calibrate(Minecraft.getInstance(), msg -> feedback(source, msg));
+		return 1;
+	}
+
+	private int detectStatus(FabricClientCommandSource source) {
+		Minecraft client = Minecraft.getInstance();
+		feedback(source, "§bmc-locate detection§r  " + detector.status(client));
+		if (client.hasSingleplayerServer()) {
+			feedback(source, "§7Singleplayer uses the exact reader (§e/mclocate structures§7). "
+					+ "Calibrate for servers here: stand by a desert pyramid, run §e/mclocate calibrate§7 "
+					+ "(twice, on different pyramids).");
+		} else {
+			feedback(source, "§7On a server this runs automatically as you explore — but only once its "
+					+ "offset is confirmed in singleplayer. Detected origins feed the crack via the biome hash.");
+		}
 		return 1;
 	}
 
@@ -447,10 +494,14 @@ public class ExporterClient implements ClientModInitializer {
 
 	private int showConfig(FabricClientCommandSource source) {
 		feedback(source, "§bmc-locate config§r  (change with §e/mclocate config <key> <value>§r)");
+		feedback(source, "  enabled = " + (config.enabled ? "§atrue" : "§cfalse") + "§r  §7(master; /mclocate on|off)");
 		feedback(source, "  autoBedrock = " + config.autoBedrock);
 		feedback(source, "  autoPillars = " + config.autoPillars);
 		feedback(source, "  autoEyes = " + config.autoEyes);
 		feedback(source, "  announce = " + config.announce);
+		feedback(source, "  announceStructures = " + config.announceStructures);
+		feedback(source, "  outline = " + config.outline);
+		feedback(source, "  detectStructures = " + config.detectStructures + "  §7(server-side, needs calibration)");
 		feedback(source, "  hud = " + config.hud);
 		feedback(source, "  bedrockStride = " + config.bedrockStride + "  §7(1-16)");
 		feedback(source, "  maxBedrock = " + config.maxBedrock);
@@ -460,10 +511,14 @@ public class ExporterClient implements ClientModInitializer {
 	private int setConfig(FabricClientCommandSource source, String key, String value) {
 		try {
 			switch (key.toLowerCase(Locale.ROOT)) {
+				case "enabled" -> config.enabled = Boolean.parseBoolean(value);
 				case "autobedrock" -> config.autoBedrock = Boolean.parseBoolean(value);
 				case "autopillars" -> config.autoPillars = Boolean.parseBoolean(value);
 				case "autoeyes" -> config.autoEyes = Boolean.parseBoolean(value);
 				case "announce" -> config.announce = Boolean.parseBoolean(value);
+				case "announcestructures" -> config.announceStructures = Boolean.parseBoolean(value);
+				case "outline" -> config.outline = Boolean.parseBoolean(value);
+				case "detectstructures" -> config.detectStructures = Boolean.parseBoolean(value);
 				case "hud" -> config.hud = Boolean.parseBoolean(value);
 				case "bedrockstride" -> config.bedrockStride = Math.max(1, Math.min(16, Integer.parseInt(value)));
 				case "maxbedrock" -> config.maxBedrock = Math.max(64, Integer.parseInt(value));

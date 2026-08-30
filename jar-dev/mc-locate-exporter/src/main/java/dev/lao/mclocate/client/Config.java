@@ -15,6 +15,13 @@ import java.util.Properties;
  * a surprise even when the data is harmless.
  */
 public final class Config {
+	/**
+	 * Master switch. When off, the mod does nothing passively — no collection,
+	 * no capture, no outline, no announcements. Every other toggle is subordinate
+	 * to this one. Toggle with {@code /mclocate on|off} or in the GUI.
+	 */
+	public boolean enabled = true;
+
 	/** Sample every Nth block along each axis of a chunk layer. */
 	public int bedrockStride = 4;
 
@@ -42,6 +49,14 @@ public final class Config {
 	/** Draw a wireframe outline around found structures (1.21.11 only for now). */
 	public boolean outline = true;
 
+	/**
+	 * Detect structures from their blocks (works on servers, unlike the
+	 * integrated-server reader). Each detector self-calibrates against the real
+	 * origin in singleplayer before it is trusted on a server — see
+	 * {@link StructureDetector}.
+	 */
+	public boolean detectStructures = true;
+
 
 	private Path file;
 
@@ -60,6 +75,7 @@ public final class Config {
 			}
 		}
 
+		cfg.enabled = readBool(p, "enabled", cfg.enabled);
 		cfg.bedrockStride = clamp(readInt(p, "bedrockStride", cfg.bedrockStride), 1, 16);
 		cfg.maxBedrock = clamp(readInt(p, "maxBedrock", cfg.maxBedrock), 64, 1_000_000);
 		cfg.autoBedrock = readBool(p, "autoBedrock", cfg.autoBedrock);
@@ -69,6 +85,7 @@ public final class Config {
 		cfg.hud = readBool(p, "hud", cfg.hud);
 		cfg.announceStructures = readBool(p, "announceStructures", cfg.announceStructures);
 		cfg.outline = readBool(p, "outline", cfg.outline);
+		cfg.detectStructures = readBool(p, "detectStructures", cfg.detectStructures);
 		return cfg;
 	}
 
@@ -77,6 +94,7 @@ public final class Config {
 			return;
 		}
 		Properties p = new Properties();
+		p.setProperty("enabled", Boolean.toString(enabled));
 		p.setProperty("bedrockStride", Integer.toString(bedrockStride));
 		p.setProperty("maxBedrock", Integer.toString(maxBedrock));
 		p.setProperty("autoBedrock", Boolean.toString(autoBedrock));
@@ -86,6 +104,7 @@ public final class Config {
 		p.setProperty("hud", Boolean.toString(hud));
 		p.setProperty("announceStructures", Boolean.toString(announceStructures));
 		p.setProperty("outline", Boolean.toString(outline));
+		p.setProperty("detectStructures", Boolean.toString(detectStructures));
 
 		try {
 			Files.createDirectories(file.getParent());

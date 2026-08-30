@@ -99,6 +99,26 @@ public final class StructureReader {
                 onResult);
     }
 
+    /**
+     * All nearby structures with their exact origin and bounding box, without
+     * recording anything. Used by {@link StructureDetector} to calibrate a
+     * block-anchor against the real origin in singleplayer. Singleplayer only.
+     */
+    public static void near(Consumer<List<Found>> onResult) {
+        onServerThread(
+                (server, level, centerX, centerZ) -> {
+                    List<Found> out = new ArrayList<>();
+                    iterate(server, level, centerX, centerZ, (path, ox, oz, box) ->
+                            out.add(new Found(normalise(path), ox, oz,
+                                    box.minX(), box.minY(), box.minZ(),
+                                    box.maxX(), box.maxY(), box.maxZ())));
+                    return out;
+                },
+                List.<Found>of(),
+                List.<Found>of(),
+                onResult);
+    }
+
     /** A unit of work run on the server thread, given the level and player chunk. */
     @FunctionalInterface
     private interface ServerWork<T> {

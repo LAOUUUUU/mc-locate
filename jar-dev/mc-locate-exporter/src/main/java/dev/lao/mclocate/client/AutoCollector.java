@@ -35,6 +35,7 @@ public final class AutoCollector {
 	private final Config config;
 	private final Path outputDir;
 	private final SeedDatabase seeds;
+	private final StructureDetector detector;
 	private final EyeTracker eyes = new EyeTracker();
 
 	private int pillarRetriesLeft;
@@ -65,17 +66,23 @@ public final class AutoCollector {
 	private static final int STRUCT_INTERVAL = 40;
 	private int sinceStruct;
 
+	/** Run block-based detection (servers) this often (~2s). */
+	private static final int DETECT_INTERVAL = 40;
+	private int sinceDetect;
+
 	/** True while an async structure scan is running, so ticks do not stack them. */
 	private boolean scanInFlight;
 
 	/** Reset each time a world is left, so a known seed is flagged on every join. */
 	private boolean knownChecked;
 
-	public AutoCollector(Session session, Config config, Path outputDir, SeedDatabase seeds) {
+	public AutoCollector(Session session, Config config, Path outputDir, SeedDatabase seeds,
+			StructureDetector detector) {
 		this.session = session;
 		this.config = config;
 		this.outputDir = outputDir;
 		this.seeds = seeds;
+		this.detector = detector;
 	}
 
 	public void register() {
@@ -216,16 +223,26 @@ public final class AutoCollector {
 				// session is never lost to a forgotten export.
 				wasInWorld = false;
 				knownChecked = false;
+				detector.onWorldLeave();
 				Outlines.clear();
 				Persistence.save(outputDir, session);
 			}
 			return;
 		}
 		wasInWorld = true;
+
+		// Master switch. Off = the mod is inert: no capture, no detection, no
+		// outline, no chat. Clear the outline so a stale box does not linger.
+		if (!config.enabled) {
+			Outlines.enabled = false;
+			return;
+		}
+
 		captureSeed(client);
 		captureBiomeHash(client);
 		checkKnownSeed(client);
 		trackStructures(client);
+		detectStructures(client);
 
 		ResourceKey<Level> dim = client.level.dimension();
 		if (!dim.equals(lastDimension)) {
@@ -262,7 +279,7 @@ public final class AutoCollector {
 	 * (high-bit liftable features), yellow decent, purple weak (large
 	 * structures), red lowest. A usefulness heuristic, not a hard rule.
 	 */
-	private static int outlineColor(String type) {
+	static int outlineColor(String type) {
 		if (type.equals("desert_pyramid") || type.equals("jungle_pyramid")
 				|| type.equals("jungle_temple") || type.equals("swamp_hut") || type.equals("igloo")
 				|| type.startsWith("shipwreck") || type.equals("pillager_outpost")) {
@@ -304,6 +321,32 @@ public final class AutoCollector {
 				}
 			});
 		}
+	}
+
+	/**
+	 * Server-side structure detection: in singleplayer the exact
+	 * {@link StructureReader} already runs (in {@link #trackStructures}), so this
+	 * only fires on a server, where it applies confirmed anchor offsets to the
+	 * blocks the client can see. Origins land in the session for the crack, exactly
+	 * like the singleplayer path.
+	 */
+	private void detectStructures(Minecraft client) {
+		if (!config.detectStructures || client.hasSingleplayerServer()
+				|| client.player == null || client.level == null) {
+			return;
+		}
+		Outlines.enabled = config.outline;
+		if (++sinceDetect < DETECT_INTERVAL) {
+			return;
+		}
+		sinceDetect = 0;
+		detector.detectOnServer(client, session, found -> {
+			if (config.announceStructures) {
+				say(client, String.format(java.util.Locale.ROOT,
+						"§bmc-locate§r detected §a%s§r — origin %d, %d recorded for the crack",
+						found.type(), found.x(), found.z()));
+			}
+		}, msg -> say(client, msg));
 	}
 
 	/**

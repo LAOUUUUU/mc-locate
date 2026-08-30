@@ -34,6 +34,10 @@ public class ConfigScreen extends Screen {
         int y = this.height / 5;
         int gap = 24;
 
+        // Master switch first — off makes the whole mod inert.
+        addRenderableWidget(toggle(x, y, w, h, "mc-locate (master)",
+                () -> config.enabled, v -> config.enabled = v));
+        y += gap;
         addRenderableWidget(toggle(x, y, w, h, "Passive bedrock",
                 () -> config.autoBedrock, v -> config.autoBedrock = v));
         y += gap;
@@ -48,6 +52,9 @@ public class ConfigScreen extends Screen {
         y += gap;
         addRenderableWidget(toggle(x, y, w, h, "Structure wireframe",
                 () -> config.outline, v -> config.outline = v));
+        y += gap;
+        addRenderableWidget(toggle(x, y, w, h, "Detect structures (servers)",
+                () -> config.detectStructures, v -> config.detectStructures = v));
         y += gap;
         addRenderableWidget(toggle(x, y, w, h, "Announce collection",
                 () -> config.announce, v -> config.announce = v));

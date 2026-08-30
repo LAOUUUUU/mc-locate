@@ -59,14 +59,17 @@ server — they only read what your client can already see.
 
 | Command | What it does |
 |---|---|
+| `/mclocate on` / `off` | **Master switch.** Off makes the whole mod inert — no collection, capture, detection, outline, or chat. |
 | `/mclocate bedrock [radius]` | Sample bedrock in a square around you at y=4 and y=123. `radius` defaults to **24**, max **128**. **Nether only.** |
 | `/mclocate pillars` | Read the ten End pillar heights. **End only**; refuses to save an arrangement that isn't a valid pillar set. |
-| `/mclocate auto on` / `off` | Turn passive collection on/off (see below). |
+| `/mclocate auto on` / `off` | Turn passive **bedrock** collection on/off (Nether). |
+| `/mclocate calibrate` | **Singleplayer.** Teach the server-side structure detector the anchor→origin offset, checked against the real origin (see [Structure detection on servers](#structure-detection-on-servers)). |
+| `/mclocate detect` | Show the structure-detector calibration status and how it behaves here. |
 | `/mclocate status` | Show what the session holds and how many seeds it's expected to leave standing. |
 | `/mclocate here` | Print your exact position, yaw, and dimension. |
 | `/mclocate mark <type>` | Record a structure at your current position (21 types). |
 | `/mclocate seed` | Record the world seed. **Singleplayer only** — the client owns the seed there, so no cracking is needed. |
-| `/mclocate structures` | Record nearby structures at their exact origins, announced with coordinates automatically as you explore, and outline them in the world (see below). **Singleplayer only.** |
+| `/mclocate structures` | Record nearby structures at their exact origins (from the integrated server), announced and outlined as you explore. **Singleplayer** — on a server this happens automatically via block detection instead (see [below](#structure-detection-on-servers)). |
 | `/mclocate known` | List your known-seed database; `known add <name>` saves the current seed. You're told when you join a known seed — even on a server, via its biome hash. |
 | `/mclocate gui` | Open a settings screen (toggles for all the auto/announce options). |
 | `/mclocate slime` / `slime not` | Mark the current chunk as a slime chunk / confirmed ordinary. Manual on purpose (see below). |
@@ -160,12 +163,45 @@ in the CLI.
 Seed cracking is against the rules on many servers (and hardened servers
 randomise the bits it relies on). Only use it where the server allows it.
 
+## Structure detection on servers
+
+A server never sends structure *starts* to the client, so `/mclocate structures`
+(which reads them from the integrated server) is singleplayer-only. But the
+blocks themselves *are* sent — so on a server the mod detects structures from
+their blocks instead, and feeds the origins to the crack alongside the biome
+hash.
+
+The crack needs a structure's **exact origin chunk** — one wrong chunk silently
+eliminates the true seed — so detection never guesses:
+
+1. **Anchor on something unambiguous.** For a desert pyramid that's the hidden
+   TNT trap (TNT generates in no other overworld structure); the mod takes the
+   TNT cluster's fixed min corner.
+2. **Learn the offset, don't hardcode it.** In singleplayer the mod knows the
+   real origin, so `/mclocate calibrate` measures `origin − anchor` and confirms
+   it only once **two** pyramids agree. Stored per Minecraft version in
+   `mc-locate/structure-offsets.properties`.
+3. **Apply it safely on servers.** Detection uses only a *confirmed* offset, and
+   re-checks that the computed origin is chunk-aligned — a bad anchor fails that
+   and is refused. Worst case is "detects nothing," never "wrong origin."
+
+**Workflow:** in singleplayer, stand by a desert pyramid and run
+`/mclocate calibrate` (twice, on different pyramids, until it says *confirmed*).
+Then on a server, detection runs automatically as you explore — `/mclocate detect`
+shows the status. Detected origins + the captured biome hash → the CLI pins the
+exact seed.
+
+Currently desert pyramids only — the safest first detector (no rotation, a
+unique anchor). More structure types can follow the same learn-then-apply path.
+
 ## Config
 
 Settings live in `.minecraft/mc-locate/config.properties`, written on first run:
 
 | Key | Default | Meaning |
 |---|---|---|
+| `enabled` | `true` | **Master switch.** Off = the mod does nothing (`/mclocate on`/`off`) |
+| `detectStructures` | `true` | Detect structures from blocks on servers (needs calibration) |
 | `autoBedrock` | `false` | Record Nether bedrock as chunks load |
 | `autoPillars` | `true` | Read pillar heights on entering the End |
 | `autoEyes` | `true` | Record thrown-eye bearings |
@@ -197,13 +233,14 @@ care whether a mod, a script, or you by hand wrote it.
 
 - **Client-side only.** Reads your own loaded chunks and your own thrown eyes.
   No packets are forged; no other player is ever referenced.
-- **Structures come from the integrated server, so `/mclocate structures` and
-  the outline are singleplayer-only.** There the client owns the server, which
-  stores each structure's authoritative `StructureStart` — an exact origin with
-  no guessed offset. A remote server never sends structure starts to the client,
-  so it does not fake them there; on a server, use `mark` for one you stand on.
-  The mod never computes structure positions itself — that needs the CLI's
-  worldgen backend, which it deliberately doesn't ship.
+- **Two ways to get structures, both exact-origin.** In singleplayer the client
+  owns the server, so `/mclocate structures` reads each authoritative
+  `StructureStart` directly (no guessed offset). On a server that isn't sent, so
+  the mod detects from blocks instead — but only via a *calibrated, confirmed*
+  anchor offset, and it refuses rather than guess (see
+  [Structure detection on servers](#structure-detection-on-servers)). Server
+  detection is desert-pyramids-only for now; `mark` still records anything you
+  stand on. The mod never computes positions from worldgen — that's the CLI's job.
 - **Server rules.** Seed-cracking is against the rules on many servers, and
   hardened servers randomise the very bits this relies on (Paper's
   `feature-seeds` and friends). On those it simply won't converge — by design.
